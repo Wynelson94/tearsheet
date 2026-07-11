@@ -60,6 +60,23 @@ class TestCrawlTool:
         assert "inc=['/docs/*']" in out
 
 
+class TestExtractTool:
+    async def test_routes_to_extract_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def fake_extract(url: str, **kw: object) -> str:
+            return f'{{"url": "{url}", "types": "{kw["types"]}", "max_rows": {kw["max_rows"]}}}'
+
+        monkeypatch.setattr("tearsheet.server.extract_page", fake_extract)
+        async with Client(server.mcp) as client:
+            result = await client.call_tool(
+                "extract",
+                {"url": "https://example.com/p", "types": ["tables"], "max_rows": 5},
+            )
+        out = text_of(result)
+        assert '"url": "https://example.com/p"' in out
+        assert "tables" in out
+        assert '"max_rows": 5' in out
+
+
 class TestScrapeTool:
     async def test_routes_to_scrape_core(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def fake_scrape(url: str, **kw: object) -> str:

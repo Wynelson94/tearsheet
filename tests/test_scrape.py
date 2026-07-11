@@ -92,7 +92,10 @@ class TestScrapeErrors:
                 200, content=fixture_bytes("spa_shell.html"), headers={"content-type": "text/html"}
             )
 
-        out = await scrape("https://example.com/app", transport=httpx.MockTransport(handler))
+        # render="never": with auto, the shell would (correctly) go to the real renderer
+        out = await scrape(
+            "https://example.com/app", render="never", transport=httpx.MockTransport(handler)
+        )
         assert "no extractable content" in out.lower()
 
     async def test_json_pretty_printed(self) -> None:

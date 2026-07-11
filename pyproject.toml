@@ -42,6 +42,11 @@ include = ["tearsheet*"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+filterwarnings = [
+    # Third-party deprecation noise, triaged 2026-07-11: mf2py (extruct dep) still uses
+    # codecs.open on py3.14. Not our code; re-check on extruct upgrades.
+    "ignore:codecs.open\\(\\) is deprecated:DeprecationWarning",
+]
 markers = [
     "playwright: requires an installed chromium binary (deselected by default in CI)",
 ]

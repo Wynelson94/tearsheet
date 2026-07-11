@@ -1,4 +1,4 @@
-"""High-level scrape: cache -> fetch -> extract -> token-shaped text output."""
+"""High-level scrape: cache -> fetch (render fallback) -> extract -> token-shaped text."""
 
 import json
 import time
@@ -8,15 +8,22 @@ import httpx
 
 from tearsheet.cache import Cache, CachedPage
 from tearsheet.config import Settings, get_settings
-from tearsheet.content import extract_content
-from tearsheet.fetch import fetch_url, needs_render
+from tearsheet.content import ExtractedContent, extract_content
+from tearsheet.fetch import FetchResult, fetch_url, needs_render
 from tearsheet.output import estimate_tokens, truncate
+from tearsheet.render import RenderUnavailableError, render_page
 from tearsheet.urls import url_hash
 
-_JS_HINT = (
-    "no extractable content: the page looks like a JavaScript app shell. "
-    "Rendering fallback requires Playwright (render='always' once available)."
-)
+_JS_HINT = "no extractable content: the page looks like a JavaScript app shell."
+_INSTALL_HINT = "run 'playwright install chromium' to enable rendering"
+_CHALLENGE_MARKERS = (b"just a moment", b"cf-chl")
+
+
+def _is_challenge(body: bytes | None) -> bool:
+    if not body:
+        return False
+    lowered = body[:4096].lower()
+    return any(marker in lowered for marker in _CHALLENGE_MARKERS)
 
 
 async def scrape(
@@ -49,7 +56,25 @@ async def scrape(
                         settings=settings,
                     )
 
-        result = await fetch_url(url, settings=settings, transport=transport)
+        warning: str | None = None
+        if render == "always":
+            try:
+                result = await render_page(url, settings=settings)
+            except RenderUnavailableError as exc:
+                return f"rendering unavailable ({exc}); {_INSTALL_HINT}"
+        else:
+            result = await fetch_url(url, settings=settings, transport=transport)
+            if (
+                render == "auto"
+                and result.status in (403, 503)
+                and _is_challenge(result.body)
+            ):
+                rendered = await _try_render(url, settings)
+                if isinstance(rendered, FetchResult) and not rendered.error:
+                    result = rendered
+                elif isinstance(rendered, str):
+                    warning = rendered
+
         if result.error:
             return f"error fetching {url}: {result.error}"
         if result.status >= 400:
@@ -58,14 +83,13 @@ async def scrape(
         ct = result.content_type
 
         if ct == "application/json" or ct.endswith("+json"):
-            return _format_json(result.final_url, body, max_length)
+            return _format_json(result.final_url, body, max_length, result.via)
         if ct == "text/plain":
-            markdown = body.decode("utf-8", errors="replace")
             return _format(
                 url=result.final_url,
                 title=None,
-                fetched_label="live | via: httpx",
-                markdown=markdown,
+                fetched_label=f"live | via: {result.via}",
+                markdown=body.decode("utf-8", errors="replace"),
                 max_length=max_length,
                 settings=settings,
             )
@@ -73,10 +97,25 @@ async def scrape(
             return f"unsupported content type '{ct}' at {url}"
 
         extracted = extract_content(body, url=result.final_url, include_links=include_links)
-        text = extracted.markdown if extracted else None
-        if text is None or needs_render(body, text):
-            return f"{_JS_HINT} (url: {result.final_url})"
-        assert extracted is not None
+        if _needs_more(body, extracted) and render == "auto" and result.via != "playwright":
+            rendered = await _try_render(url, settings)
+            if isinstance(rendered, str):
+                warning = rendered
+            elif rendered.body and not rendered.error:
+                re_extracted = extract_content(
+                    rendered.body, url=rendered.final_url, include_links=include_links
+                )
+                if re_extracted is not None and (
+                    extracted is None or len(re_extracted.markdown) > len(extracted.markdown)
+                ):
+                    result, body, extracted = rendered, rendered.body, re_extracted
+
+        if _needs_more(body, extracted) or extracted is None:
+            message = f"{_JS_HINT} (url: {result.final_url})"
+            if warning:
+                message += f"\nwarning: {warning}"
+            return message
+
         cache.put_page(
             CachedPage(
                 url=url,
@@ -84,7 +123,7 @@ async def scrape(
                 fetched_at=int(time.time()),
                 status=result.status,
                 content_type=ct,
-                via="httpx",
+                via=result.via,
                 html=body,
                 markdown=extracted.markdown,
                 title=extracted.title,
@@ -93,13 +132,25 @@ async def scrape(
         return _format(
             url=result.final_url,
             title=extracted.title,
-            fetched_label="live | via: httpx",
+            fetched_label=f"live | via: {result.via}",
             markdown=extracted.markdown,
             max_length=max_length,
             settings=settings,
         )
     finally:
         cache.close()
+
+
+def _needs_more(body: bytes, extracted: ExtractedContent | None) -> bool:
+    return extracted is None or needs_render(body, extracted.markdown)
+
+
+async def _try_render(url: str, settings: Settings) -> FetchResult | str:
+    """A FetchResult on success, or a warning string when rendering is unavailable."""
+    try:
+        return await render_page(url, settings=settings)
+    except RenderUnavailableError:
+        return _INSTALL_HINT
 
 
 def _format(
@@ -129,11 +180,14 @@ def _format(
     return "\n".join(lines)
 
 
-def _format_json(url: str, body: bytes, max_length: int) -> str:
+def _format_json(url: str, body: bytes, max_length: int, via: str) -> str:
     try:
         pretty = json.dumps(json.loads(body), indent=2, sort_keys=True)
     except ValueError:
         pretty = body.decode("utf-8", errors="replace")
     shown, truncated = truncate(pretty, max_length)
     suffix = " (truncated)" if truncated else ""
-    return f"url: {url}\nfetched: live | via: httpx\ntokens: ~{estimate_tokens(shown)}{suffix}\n---\n{shown}"
+    return (
+        f"url: {url}\nfetched: live | via: {via}\n"
+        f"tokens: ~{estimate_tokens(shown)}{suffix}\n---\n{shown}"
+    )

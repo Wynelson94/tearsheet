@@ -6,6 +6,7 @@ import asyncio
 from tearsheet.crawl import crawl
 from tearsheet.mapper import map_site
 from tearsheet.scrape import scrape
+from tearsheet.structured import extract_page
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_crawl.add_argument("--subdomains", action="store_true")
     p_crawl.add_argument("--output-dir", default=None)
     p_crawl.add_argument("--render", choices=["auto", "never", "always"], default="auto")
+
+    p_extract = sub.add_parser(
+        "extract", help="Structured data (JSON-LD/OG/microdata/tables) as JSON"
+    )
+    p_extract.add_argument("url")
+    p_extract.add_argument(
+        "--types",
+        action="append",
+        default=None,
+        choices=["json-ld", "opengraph", "microdata", "tables"],
+        help="repeatable; default all",
+    )
+    p_extract.add_argument("--max-rows", type=int, default=100)
+    p_extract.add_argument("--render", choices=["auto", "never", "always"], default="auto")
     return parser
 
 
@@ -70,6 +85,15 @@ def main(argv: list[str] | None = None) -> None:
                 exclude_patterns=args.exclude,
                 allow_subdomains=args.subdomains,
                 output_dir=args.output_dir,
+                render=args.render,
+            )
+        )
+    elif args.command == "extract":
+        out = asyncio.run(
+            extract_page(
+                args.url,
+                types=args.types,
+                max_rows=args.max_rows,
                 render=args.render,
             )
         )

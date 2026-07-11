@@ -6,8 +6,31 @@ from tearsheet.crawl import crawl as crawl_site
 from tearsheet.mapper import map_site
 from tearsheet.scrape import scrape as scrape_page
 from tearsheet.search import search as search_web
+from tearsheet.structured import extract_page
 
 mcp: FastMCP = FastMCP("tearsheet")
+
+
+@mcp.tool
+async def extract(
+    url: str,
+    types: list[str] | None = None,
+    max_rows: int = 100,
+    render: str = "auto",
+) -> str:
+    """Deterministic structured data from a page as JSON: JSON-LD, OpenGraph, microdata, HTML tables.
+
+    No LLM involved — this returns what the page itself declares. Reuses HTML cached by a
+    prior scrape of the same URL (no refetch). For semantic extraction, scrape the page and
+    read the markdown instead.
+
+    Args:
+        url: Absolute http(s) URL.
+        types: Subset of ["json-ld", "opengraph", "microdata", "tables"] (default: all).
+        max_rows: Per-table row cap.
+        render: "auto", "never", or "always" (headless browser).
+    """
+    return await extract_page(url, types=types, max_rows=max_rows, render=render)
 
 
 @mcp.tool

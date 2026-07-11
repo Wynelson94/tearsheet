@@ -38,6 +38,18 @@ class TestParser:
         assert args.exclude == ["/docs/legacy/*"]
         assert args.output_dir == "/tmp/x"
 
+    def test_extract_defaults(self) -> None:
+        args = build_parser().parse_args(["extract", "https://example.com/p"])
+        assert args.command == "extract"
+        assert args.types is None
+        assert args.max_rows == 100
+
+    def test_extract_types(self) -> None:
+        args = build_parser().parse_args(
+            ["extract", "https://example.com/p", "--types", "tables", "--types", "json-ld"]
+        )
+        assert args.types == ["tables", "json-ld"]
+
     def test_scrape_flags(self) -> None:
         args = build_parser().parse_args(
             ["scrape", "https://example.com/a", "--max-length", "0", "--links", "--fresh"]
