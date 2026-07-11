@@ -72,6 +72,40 @@ class TestRenderPreference:
         assert got.via == "playwright"
 
 
+class TestEviction:
+    def test_prune_removes_only_old_pages(self, cache: Cache) -> None:
+        now = int(time.time())
+        cache.put_page(make_page("https://example.com/old", fetched_at=now - 40 * 86400))
+        cache.put_page(make_page("https://example.com/fresh", fetched_at=now - 3600))
+        removed = cache.prune(older_than_seconds=30 * 86400)
+        assert removed == 1
+        assert cache.get_page("https://example.com/fresh", ttl_seconds=86400) is not None
+        # even a generous TTL can't resurrect the pruned row
+        assert cache.get_page("https://example.com/old", ttl_seconds=10**9) is None
+
+    def test_prune_also_drops_stale_robots(self, cache: Cache) -> None:
+        cache.put_robots("https://example.com", "User-agent: *", None)
+        removed = cache.prune(older_than_seconds=0)
+        assert removed >= 1
+        assert cache.get_robots("https://example.com", ttl_seconds=10**9) is None
+
+    def test_stats_counts(self, cache: Cache) -> None:
+        cache.put_page(make_page("https://example.com/a"))
+        cache.put_page(make_page("https://example.com/b"))
+        cache.put_robots("https://example.com", "User-agent: *", None)
+        stats = cache.stats()
+        assert stats["pages"] == 2
+        assert stats["robots"] == 1
+        assert stats["db_bytes"] > 0
+
+    def test_clear_empties_everything(self, cache: Cache) -> None:
+        cache.put_page(make_page("https://example.com/a"))
+        cache.put_robots("https://example.com", "User-agent: *", None)
+        cache.clear()
+        assert cache.stats()["pages"] == 0
+        assert cache.stats()["robots"] == 0
+
+
 class TestRobots:
     def test_roundtrip(self, cache: Cache) -> None:
         cache.put_robots("https://example.com", "User-agent: *\nDisallow: /admin", 2.5)

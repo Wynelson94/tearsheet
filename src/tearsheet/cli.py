@@ -50,6 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_extract.add_argument("--max-rows", type=int, default=100)
     p_extract.add_argument("--render", choices=["auto", "never", "always"], default="auto")
+
+    p_cache = sub.add_parser("cache", help="Inspect or clean the local cache")
+    cache_sub = p_cache.add_subparsers(dest="cache_command", required=True)
+    cache_sub.add_parser("stats", help="Entry counts and database size")
+    p_prune = cache_sub.add_parser("prune", help="Delete entries older than --days")
+    p_prune.add_argument("--days", type=int, default=30)
+    cache_sub.add_parser("clear", help="Delete everything")
     return parser
 
 
@@ -97,7 +104,30 @@ def main(argv: list[str] | None = None) -> None:
                 render=args.render,
             )
         )
+    elif args.command == "cache":
+        out = _run_cache_command(args)
     print(out)
+
+
+def _run_cache_command(args: argparse.Namespace) -> str:
+    from tearsheet.cache import Cache
+    from tearsheet.config import get_settings
+
+    cache = Cache(get_settings().cache_db)
+    try:
+        if args.cache_command == "stats":
+            s = cache.stats()
+            return (
+                f"pages: {s['pages']}  robots: {s['robots']}  crawls: {s['crawls']}"
+                f"  size: {s['db_bytes'] / 1024:.0f} KiB"
+            )
+        if args.cache_command == "prune":
+            removed = cache.prune(older_than_seconds=args.days * 86400)
+            return f"pruned {removed} entries older than {args.days} days"
+        cache.clear()
+        return "cache cleared"
+    finally:
+        cache.close()
 
 
 if __name__ == "__main__":

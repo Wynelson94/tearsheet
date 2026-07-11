@@ -98,6 +98,35 @@ class TestScrapeErrors:
         )
         assert "no extractable content" in out.lower()
 
+    async def test_pdf_extracted_via_pypdf(self, pdf_bytes: bytes) -> None:
+        calls = {"count": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["count"] += 1
+            return httpx.Response(
+                200, content=pdf_bytes, headers={"content-type": "application/pdf"}
+            )
+
+        out = await scrape("https://example.com/paper.pdf", transport=httpx.MockTransport(handler))
+        assert "via: pypdf" in out
+        assert "Tearsheet PDF extraction works" in out
+
+        out2 = await scrape(
+            "https://example.com/paper.pdf", transport=httpx.MockTransport(handler)
+        )
+        assert calls["count"] == 1
+        assert "cache" in out2
+        assert "Tearsheet PDF extraction works" in out2
+
+    async def test_corrupt_pdf_reports_error(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, content=b"%PDF-not really", headers={"content-type": "application/pdf"}
+            )
+
+        out = await scrape("https://example.com/bad.pdf", transport=httpx.MockTransport(handler))
+        assert "could not extract text from pdf" in out.lower()
+
     async def test_json_pretty_printed(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(

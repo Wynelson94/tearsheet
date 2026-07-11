@@ -127,6 +127,37 @@ class Cache:
         )
         self._conn.commit()
 
+    def prune(self, older_than_seconds: int) -> int:
+        """Delete pages/robots entries older than the cutoff. Returns rows removed."""
+        cutoff = int(time.time()) - older_than_seconds
+        pages = self._conn.execute("DELETE FROM pages WHERE fetched_at <= ?", (cutoff,)).rowcount
+        robots = self._conn.execute(
+            "DELETE FROM robots WHERE fetched_at <= ?", (cutoff,)
+        ).rowcount
+        self._conn.commit()
+        self._conn.execute("VACUUM")
+        return pages + robots
+
+    def stats(self) -> dict[str, int]:
+        pages = self._conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+        robots = self._conn.execute("SELECT COUNT(*) FROM robots").fetchone()[0]
+        crawls = self._conn.execute("SELECT COUNT(*) FROM crawls").fetchone()[0]
+        page_size, page_count = self._conn.execute(
+            "SELECT page_size, page_count FROM pragma_page_size(), pragma_page_count()"
+        ).fetchone()
+        return {
+            "pages": pages,
+            "robots": robots,
+            "crawls": crawls,
+            "db_bytes": page_size * page_count,
+        }
+
+    def clear(self) -> None:
+        for table in ("pages", "robots", "crawls"):
+            self._conn.execute(f"DELETE FROM {table}")  # noqa: S608 - fixed table names
+        self._conn.commit()
+        self._conn.execute("VACUUM")
+
     def log_crawl(
         self, crawl_id: str, root_url: str, started_at: int, pages: int, output_dir: str
     ) -> None:

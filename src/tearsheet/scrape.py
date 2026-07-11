@@ -41,17 +41,27 @@ async def scrape(
     try:
         if not fresh:
             cached = cache.get_page(url, settings.page_ttl_seconds)
-            if cached is not None and cached.html:
-                extracted = extract_content(
-                    cached.html, url=cached.final_url, include_links=include_links
-                )
-                if extracted is not None:
-                    day = datetime.fromtimestamp(cached.fetched_at).strftime("%Y-%m-%d")
+            if cached is not None:
+                day = datetime.fromtimestamp(cached.fetched_at).strftime("%Y-%m-%d")
+                if cached.html:
+                    extracted = extract_content(
+                        cached.html, url=cached.final_url, include_links=include_links
+                    )
+                    if extracted is not None:
+                        return _format(
+                            url=cached.final_url or url,
+                            title=extracted.title or cached.title,
+                            fetched_label=f"cache {day} | via: {cached.via}",
+                            markdown=extracted.markdown,
+                            max_length=max_length,
+                            settings=settings,
+                        )
+                elif cached.markdown:  # html-less entries (e.g. PDFs) keep only markdown
                     return _format(
                         url=cached.final_url or url,
-                        title=extracted.title or cached.title,
+                        title=cached.title,
                         fetched_label=f"cache {day} | via: {cached.via}",
-                        markdown=extracted.markdown,
+                        markdown=cached.markdown,
                         max_length=max_length,
                         settings=settings,
                     )
@@ -82,6 +92,31 @@ async def scrape(
         body = result.body or b""
         ct = result.content_type
 
+        if ct == "application/pdf":
+            text = _extract_pdf_text(body)
+            if text is None:
+                return f"could not extract text from PDF at {url}"
+            cache.put_page(
+                CachedPage(
+                    url=url,
+                    final_url=result.final_url,
+                    fetched_at=int(time.time()),
+                    status=result.status,
+                    content_type=ct,
+                    via="pypdf",
+                    html=None,
+                    markdown=text,
+                    title=None,
+                )
+            )
+            return _format(
+                url=result.final_url,
+                title=None,
+                fetched_label="live | via: pypdf",
+                markdown=text,
+                max_length=max_length,
+                settings=settings,
+            )
         if ct == "application/json" or ct.endswith("+json"):
             return _format_json(result.final_url, body, max_length, result.via)
         if ct == "text/plain":
@@ -143,6 +178,20 @@ async def scrape(
 
 def _needs_more(body: bytes, extracted: ExtractedContent | None) -> bool:
     return extracted is None or needs_render(body, extracted.markdown)
+
+
+def _extract_pdf_text(body: bytes) -> str | None:
+    from io import BytesIO
+
+    from pypdf import PdfReader  # deferred: only needed for PDF responses
+
+    try:
+        reader = PdfReader(BytesIO(body))
+        pages = [page.extract_text() or "" for page in reader.pages]
+    except Exception:
+        return None
+    text = "\n\n".join(p.strip() for p in pages if p.strip())
+    return text or None
 
 
 async def _try_render(url: str, settings: Settings) -> FetchResult | str:

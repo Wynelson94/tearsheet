@@ -50,6 +50,13 @@ class TestParser:
         )
         assert args.types == ["tables", "json-ld"]
 
+    def test_cache_subcommands(self) -> None:
+        assert build_parser().parse_args(["cache", "stats"]).cache_command == "stats"
+        args = build_parser().parse_args(["cache", "prune", "--days", "10"])
+        assert args.cache_command == "prune"
+        assert args.days == 10
+        assert build_parser().parse_args(["cache", "clear"]).cache_command == "clear"
+
     def test_scrape_flags(self) -> None:
         args = build_parser().parse_args(
             ["scrape", "https://example.com/a", "--max-length", "0", "--links", "--fresh"]
