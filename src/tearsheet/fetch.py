@@ -80,6 +80,31 @@ async def fetch_url(
         )
 
 
+_BLOCK_MARKERS = (
+    b"complete the captcha",
+    b"solve the captcha",
+    b"flagged as potentially automated",
+    b"attention required!",
+    b"verify you are a human",
+    b"are you a robot",
+    b"enable javascript and cookies to continue",
+)
+_BLOCK_MAX_BODY = 30_000  # real bot walls are small pages; articles about captchas aren't
+
+
+def looks_blocked(body: bytes | None) -> bool:
+    """True when a 200-status response is actually a bot-wall/CAPTCHA page.
+
+    Strong phrase markers + small-body guard: pages that merely DISCUSS captchas
+    (large articles) must not flag, and a cross-domain redirect alone must not flag
+    (legit redirects exist). Callers surface the final URL so walls stay visible.
+    """
+    if not body or len(body) > _BLOCK_MAX_BODY:
+        return False
+    lowered = body.lower()
+    return any(marker in lowered for marker in _BLOCK_MARKERS)
+
+
 def needs_render(html: bytes, extracted_text: str | None) -> bool:
     """True when a fetched page looks like an empty JS shell worth re-rendering."""
     if extracted_text is not None and len(extracted_text) >= 250:

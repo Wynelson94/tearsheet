@@ -35,6 +35,31 @@ class TestArticleExtraction:
         assert "https://example.com/related" in result.markdown
 
 
+class TestKnownUpstreamManglingDocumented:
+    """Documents trafilatura 2.1.0's markdown-serializer bug with nested emphasis
+    (<strong><em>word </em></strong> mid-sentence): the emphasized word is torn out
+    and glued to the START of the next paragraph, and the remainder of its sentence
+    is wrongly bolded. Found in the wild 2026-07-11 (burr.com CMMC article) during
+    the probation audit; reported upstream.
+
+    THESE ASSERTIONS PIN THE BROKEN BEHAVIOR ON PURPOSE: when a trafilatura upgrade
+    fixes the serializer, this test FAILS — that's the signal to drop the README
+    known-issue entry and this test, not a regression.
+    """
+
+    def test_nested_emphasis_displacement_still_present(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        result = extract_content(
+            fixture_bytes("emphasis_mangle.html"), url="https://example.com/repro"
+        )
+        assert result is not None
+        # "verify" is displaced onto the start of the NEXT paragraph
+        assert "*verify*Starting November 10" in result.markdown
+        # and its original sentence is left broken mid-phrase
+        assert "plan to \n" in result.markdown or "plan to\n" in result.markdown
+
+
 class TestDegenerateInput:
     def test_spa_shell_yields_none_or_tiny(self, fixture_bytes: Callable[[str], bytes]) -> None:
         result = extract_content(fixture_bytes("spa_shell.html"), url="https://example.com/app")

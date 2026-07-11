@@ -85,6 +85,62 @@ class TestRenderAuto:
         assert "Rendered App" in out
 
 
+CUSTOM_MOUNT_SPA = (
+    b"<html><head><title>React \xe2\x80\xa2 TodoMVC</title></head><body>"
+    b"<div>This is just a demo banner, quite short.</div>"
+    b'<section class="todoapp"></section>'
+    b"<footer><p>Double-click to edit a todo</p></footer>"
+    b"</body></html>"
+)
+
+
+class TestTinyExtractionRenderAttempt:
+    """SPAs with custom mount points have no shell markers — tiny extraction alone
+    must trigger one render attempt in auto mode (keep-better logic decides)."""
+
+    @pytest.fixture
+    def custom_mount_transport(self) -> httpx.MockTransport:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, content=CUSTOM_MOUNT_SPA, headers={"content-type": "text/html"}
+            )
+
+        return httpx.MockTransport(handler)
+
+    async def test_custom_mount_spa_upgrades_to_rendered(
+        self, custom_mount_transport: httpx.MockTransport, fake_renderer: dict[str, object]
+    ) -> None:
+        out = await scrape("https://example.com/todo", transport=custom_mount_transport)
+        assert fake_renderer["count"] == 1
+        assert "via: playwright" in out
+        assert "Rendered App" in out
+
+    async def test_httpx_kept_when_render_is_not_better(
+        self,
+        custom_mount_transport: httpx.MockTransport,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def render_worse(url: str, *, settings: object) -> FetchResult:
+            return FetchResult(
+                url=url, final_url=url, status=200, content_type="text/html",
+                body=b"<html><body><p>tiny</p></body></html>", via="playwright",
+            )
+
+        monkeypatch.setattr("tearsheet.scrape.render_page", render_worse)
+        out = await scrape("https://example.com/todo", transport=custom_mount_transport)
+        assert "via: httpx" in out
+        assert "demo banner" in out
+
+    async def test_never_mode_skips_the_attempt(
+        self, custom_mount_transport: httpx.MockTransport, fake_renderer: dict[str, object]
+    ) -> None:
+        out = await scrape(
+            "https://example.com/todo", render="never", transport=custom_mount_transport
+        )
+        assert fake_renderer["count"] == 0
+        assert "via: httpx" in out
+
+
 class TestRenderNever:
     async def test_never_mode_reports_shell_without_rendering(
         self, spa_transport: httpx.MockTransport, fake_renderer: dict[str, object]

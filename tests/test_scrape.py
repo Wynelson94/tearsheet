@@ -127,6 +127,73 @@ class TestScrapeErrors:
         out = await scrape("https://example.com/bad.pdf", transport=httpx.MockTransport(handler))
         assert "could not extract text from pdf" in out.lower()
 
+    async def test_botwall_page_reported_blocked_and_never_cached(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        calls = {"count": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["count"] += 1
+            # 200-status CAPTCHA wall after a cross-domain redirect, like eCFR's
+            if request.url.host == "www.ecfr.example":
+                return httpx.Response(
+                    302, headers={"location": "https://unblock.example/challenge"}
+                )
+            return httpx.Response(
+                200, content=fixture_bytes("botwall.html"), headers={"content-type": "text/html"}
+            )
+
+        transport = httpx.MockTransport(handler)
+        out = await scrape("https://www.ecfr.example/title-48", render="never", transport=transport)
+        assert "blocked by bot protection" in out
+        assert "unblock.example" in out  # final url visible so the wall is obvious
+        # nothing cached: a second scrape must hit the network again
+        first_fetches = calls["count"]
+        out2 = await scrape(
+            "https://www.ecfr.example/title-48", render="never", transport=transport
+        )
+        assert calls["count"] > first_fetches
+        assert "blocked by bot protection" in out2
+
+    async def test_article_mentioning_captchas_is_not_flagged(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        # a large real article ABOUT captchas (e.g. Wikipedia) must not read as a wall
+        article = fixture_bytes("article.html").replace(
+            b"<h1>The Quiet Art of Web Scraping</h1>",
+            b"<h1>The Quiet Art of Web Scraping</h1>"
+            b"<p>Sites often ask visitors to complete the CAPTCHA to verify you are a human"
+            b" before scraping; this article discusses those countermeasures.</p>",
+        ) + b"<!-- " + b"filler " * 6000 + b"-->"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=article, headers={"content-type": "text/html"})
+
+        out = await scrape(
+            "https://example.com/captcha-essay", render="never",
+            transport=httpx.MockTransport(handler),
+        )
+        assert "blocked by bot protection" not in out
+        assert "linden trees bloom" in out
+
+    async def test_cross_domain_redirect_without_markers_is_not_flagged(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "short.example":
+                return httpx.Response(
+                    301, headers={"location": "https://real.example/essay"}
+                )
+            return httpx.Response(
+                200, content=fixture_bytes("article.html"), headers={"content-type": "text/html"}
+            )
+
+        out = await scrape(
+            "https://short.example/x", render="never", transport=httpx.MockTransport(handler)
+        )
+        assert "blocked" not in out
+        assert "linden trees bloom" in out
+
     async def test_json_pretty_printed(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(

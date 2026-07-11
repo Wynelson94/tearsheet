@@ -87,10 +87,18 @@ user-initiated, equivalent to opening the page in your browser). The default UA
 identifies the tool honestly; Chromium fallback presents a real browser UA. This is
 a research tool for reading the public web — not for evading paywalls or bot defenses.
 
-## Limitations
+## Limitations & known issues
 
-- SPAs with *custom* mount points (e.g. `<section class="todoapp">`) can evade the
-  auto-render heuristic — use `render="always"` for those.
+- **Emphasis mangling (upstream)**: trafilatura 2.1.0's markdown serializer displaces
+  nested-emphasis words (`<strong><em>word</em></strong>` mid-sentence) onto the next
+  paragraph and can drop characters around inline `<em>` (observed: "i.e." → "e.").
+  Facts survive; verbatim quotes should be re-verified against the source before reuse.
+  Pinned by `tests/test_content.py::TestKnownUpstreamManglingDocumented` (fails when
+  upstream fixes it). Reported to adbar/trafilatura.
+- Bot-walled sites (eCFR, DoD, Cloudflare in strict mode) are reported as
+  `blocked by bot protection …` — deliberately not evaded; use the site's official API.
+- Wikipedia extractions can include maintenance-hatnote table noise ("This article
+  needs more citations") — cosmetic.
 - Paywalled/login-gated content is out of scope; a suspiciously low token count is the tell.
 - `search` depends on ddgs backends, which occasionally break upstream; `backend="auto"`
   rotates around failures.

@@ -9,7 +9,7 @@ import httpx
 from tearsheet.cache import Cache, CachedPage
 from tearsheet.config import Settings, get_settings
 from tearsheet.content import ExtractedContent, extract_content
-from tearsheet.fetch import FetchResult, fetch_url, needs_render
+from tearsheet.fetch import FetchResult, fetch_url, looks_blocked, needs_render
 from tearsheet.output import estimate_tokens, truncate
 from tearsheet.render import RenderUnavailableError, render_page
 from tearsheet.urls import url_hash
@@ -92,6 +92,12 @@ async def scrape(
         body = result.body or b""
         ct = result.content_type
 
+        if ct.startswith("text/") and looks_blocked(body):
+            return (
+                f"blocked by bot protection (final url: {result.final_url});"
+                " the site may offer an official API — try that or a manual fetch"
+            )
+
         if ct == "application/pdf":
             text = _extract_pdf_text(body)
             if text is None:
@@ -132,7 +138,10 @@ async def scrape(
             return f"unsupported content type '{ct}' at {url}"
 
         extracted = extract_content(body, url=result.final_url, include_links=include_links)
-        if _needs_more(body, extracted) and render == "auto" and result.via != "playwright":
+        # tiny extraction triggers a render attempt even without shell markers (custom
+        # SPA mounts); keep-whichever-extracts-more decides. crawl stays marker-based.
+        should_attempt = _needs_more(body, extracted) or _tiny(extracted)
+        if should_attempt and render == "auto" and result.via != "playwright":
             rendered = await _try_render(url, settings)
             if isinstance(rendered, str):
                 warning = rendered
@@ -178,6 +187,10 @@ async def scrape(
 
 def _needs_more(body: bytes, extracted: ExtractedContent | None) -> bool:
     return extracted is None or needs_render(body, extracted.markdown)
+
+
+def _tiny(extracted: ExtractedContent | None) -> bool:
+    return extracted is None or len(extracted.markdown) < 250
 
 
 def _extract_pdf_text(body: bytes) -> str | None:
