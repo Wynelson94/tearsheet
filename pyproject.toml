@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tearsheet"
+version = "0.1.0"
+description = "Local web-to-markdown for LLM research: scrape, crawl, map, search, extract — token-efficient, MCP-first."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Nate Nelson" }]
+dependencies = [
+    "fastmcp>=3,<4",
+    "httpx>=0.28",
+    "trafilatura>=2.1",
+    "ddgs>=9",
+    "playwright>=1.45",
+    "extruct>=0.18",
+    "lxml>=5",
+    "protego>=0.6",
+    "pypdf>=6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+tearsheet = "tearsheet.cli:main"
+tearsheet-mcp = "tearsheet.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tearsheet*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+markers = [
+    "playwright: requires an installed chromium binary (deselected by default in CI)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",
+    "SIM102",  # nested if → and: often less readable with long conditions
+    "SIM103",  # needless-bool: prefer explicit `if ... return True` in guard fns
+    "SIM105",  # try/except/pass: kept for grep-ability + consistent style
+    "SIM108",  # if/else → ternary: not always more readable
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+files = ["src/tearsheet"]
