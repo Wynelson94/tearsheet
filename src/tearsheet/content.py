@@ -2,8 +2,6 @@
 
 from dataclasses import dataclass
 
-import trafilatura
-
 
 @dataclass
 class ExtractedContent:
@@ -19,6 +17,8 @@ def extract_content(
 
     Takes bytes (not str) so trafilatura's charset detection handles mislabeled pages.
     """
+    import trafilatura  # deferred: heavy import (lxml) would stall MCP server startup
+
     if not html:
         return None
     markdown = trafilatura.extract(
