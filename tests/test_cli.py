@@ -50,6 +50,13 @@ class TestParser:
         )
         assert args.types == ["tables", "json-ld"]
 
+    def test_search_defaults(self) -> None:
+        args = build_parser().parse_args(["search", "rust web crawlers"])
+        assert args.command == "search"
+        assert args.query == "rust web crawlers"
+        assert args.max_results == 8
+        assert args.backend == "auto"
+
     def test_cache_subcommands(self) -> None:
         assert build_parser().parse_args(["cache", "stats"]).cache_command == "stats"
         args = build_parser().parse_args(["cache", "prune", "--days", "10"])
@@ -67,6 +74,16 @@ class TestParser:
 
 
 class TestMain:
+    def test_main_routes_search(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        async def fake_search(query: str, **kw: object) -> str:
+            return f"SEARCHED {query} n={kw['max_results']}"
+
+        monkeypatch.setattr("tearsheet.cli.search", fake_search)
+        main(["search", "cmmc level 1", "--max-results", "4"])
+        assert "SEARCHED cmmc level 1 n=4" in capsys.readouterr().out
+
     def test_main_prints_scrape_output(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:

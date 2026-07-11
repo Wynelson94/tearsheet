@@ -6,6 +6,7 @@ import asyncio
 from tearsheet.crawl import crawl
 from tearsheet.mapper import map_site
 from tearsheet.scrape import scrape
+from tearsheet.search import search
 from tearsheet.structured import extract_page
 
 
@@ -50,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_extract.add_argument("--max-rows", type=int, default=100)
     p_extract.add_argument("--render", choices=["auto", "never", "always"], default="auto")
+
+    p_search = sub.add_parser("search", help="Keyless web metasearch")
+    p_search.add_argument("query")
+    p_search.add_argument("--max-results", type=int, default=8)
+    p_search.add_argument("--backend", default="auto")
 
     p_cache = sub.add_parser("cache", help="Inspect or clean the local cache")
     cache_sub = p_cache.add_subparsers(dest="cache_command", required=True)
@@ -103,6 +109,10 @@ def main(argv: list[str] | None = None) -> None:
                 max_rows=args.max_rows,
                 render=args.render,
             )
+        )
+    elif args.command == "search":
+        out = asyncio.run(
+            search(args.query, max_results=args.max_results, backend=args.backend)
         )
     elif args.command == "cache":
         out = _run_cache_command(args)
