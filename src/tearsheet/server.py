@@ -2,6 +2,8 @@
 
 from fastmcp import FastMCP
 
+from tearsheet.crawl import crawl as crawl_site
+from tearsheet.mapper import map_site
 from tearsheet.scrape import scrape as scrape_page
 from tearsheet.search import search as search_web
 
@@ -50,6 +52,75 @@ async def search(query: str, max_results: int = 8, backend: str = "auto") -> str
         backend: Search backend ("auto" rotates; or e.g. "duckduckgo", "brave", "bing").
     """
     return await search_web(query, max_results=max_results, backend=backend)
+
+
+@mcp.tool
+async def map(  # noqa: A001 - tool name mirrors Firecrawl's API
+    url: str,
+    max_urls: int = 200,
+    search: str | None = None,
+    use_sitemap: bool = True,
+    include_subdomains: bool = False,
+) -> str:
+    """List a site's URLs (sitemap.xml first, plus links found on the given page) WITHOUT scraping them.
+
+    Cheapest way to see what a site contains: map first, pick the URLs that matter, then
+    scrape only those. Returns one path per line (root shown once in the summary line).
+
+    Args:
+        url: Site root or any page on the site.
+        max_urls: Cap on URLs returned.
+        search: Case-insensitive substring filter (e.g. "auth" to find auth-related pages).
+        use_sitemap: Try sitemap.xml (and sitemap indexes) before link discovery.
+        include_subdomains: Also keep URLs on sibling subdomains.
+    """
+    return await map_site(
+        url,
+        max_urls=max_urls,
+        search=search,
+        use_sitemap=use_sitemap,
+        include_subdomains=include_subdomains,
+    )
+
+
+@mcp.tool
+async def crawl(
+    url: str,
+    max_pages: int = 30,
+    max_depth: int = 2,
+    include_patterns: list[str] | None = None,
+    exclude_patterns: list[str] | None = None,
+    allow_subdomains: bool = False,
+    output_dir: str | None = None,
+    render: str = "auto",
+) -> str:
+    """Crawl a site breadth-first and save each page as a markdown file on disk.
+
+    Page content NEVER enters this tool's output: you get a compact index (filename,
+    ~token estimate, title, path) plus the output directory. Read the files you need
+    afterwards. Obeys robots.txt and rate-limits itself. Use include_patterns like
+    ["/docs/*"] to stay inside one section.
+
+    Args:
+        url: Start URL (its host bounds the crawl).
+        max_pages: Hard cap on pages saved.
+        max_depth: Link-following depth from the start URL.
+        include_patterns: Glob patterns on URL paths; discovered links must match one.
+        exclude_patterns: Glob patterns on URL paths to skip; wins over include.
+        allow_subdomains: Follow links onto sibling subdomains.
+        output_dir: Where to write files (default: ~/.tearsheet/crawls/<site>-<date>-<id>/).
+        render: Reserved for JS rendering ("auto"/"never"/"always").
+    """
+    return await crawl_site(
+        url,
+        max_pages=max_pages,
+        max_depth=max_depth,
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns,
+        allow_subdomains=allow_subdomains,
+        output_dir=output_dir,
+        render=render,
+    )
 
 
 def main() -> None:

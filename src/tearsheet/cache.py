@@ -127,5 +127,15 @@ class Cache:
         )
         self._conn.commit()
 
+    def log_crawl(
+        self, crawl_id: str, root_url: str, started_at: int, pages: int, output_dir: str
+    ) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO crawls (crawl_id, root_url, started_at, pages, output_dir)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (crawl_id, root_url, started_at, pages, output_dir),
+        )
+        self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()

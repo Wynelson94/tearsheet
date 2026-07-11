@@ -3,6 +3,8 @@
 import argparse
 import asyncio
 
+from tearsheet.crawl import crawl
+from tearsheet.mapper import map_site
 from tearsheet.scrape import scrape
 
 
@@ -16,6 +18,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_scrape.add_argument("--links", action="store_true", help="keep hyperlinks in markdown")
     p_scrape.add_argument("--fresh", action="store_true", help="bypass cache")
     p_scrape.add_argument("--render", choices=["auto", "never", "always"], default="auto")
+
+    p_map = sub.add_parser("map", help="List a site's URLs without scraping them")
+    p_map.add_argument("url")
+    p_map.add_argument("--max-urls", type=int, default=200)
+    p_map.add_argument("--search", default=None, help="substring filter")
+    p_map.add_argument("--no-sitemap", action="store_true", help="skip sitemap.xml")
+    p_map.add_argument("--subdomains", action="store_true", help="include sibling subdomains")
+
+    p_crawl = sub.add_parser("crawl", help="Crawl a site to markdown files + index")
+    p_crawl.add_argument("url")
+    p_crawl.add_argument("--max-pages", type=int, default=30)
+    p_crawl.add_argument("--max-depth", type=int, default=2)
+    p_crawl.add_argument("--include", action="append", default=None, help="path glob, repeatable")
+    p_crawl.add_argument("--exclude", action="append", default=None, help="path glob, repeatable")
+    p_crawl.add_argument("--subdomains", action="store_true")
+    p_crawl.add_argument("--output-dir", default=None)
+    p_crawl.add_argument("--render", choices=["auto", "never", "always"], default="auto")
     return parser
 
 
@@ -31,7 +50,30 @@ def main(argv: list[str] | None = None) -> None:
                 render=args.render,
             )
         )
-        print(out)
+    elif args.command == "map":
+        out = asyncio.run(
+            map_site(
+                args.url,
+                max_urls=args.max_urls,
+                search=args.search,
+                use_sitemap=not args.no_sitemap,
+                include_subdomains=args.subdomains,
+            )
+        )
+    elif args.command == "crawl":
+        out = asyncio.run(
+            crawl(
+                args.url,
+                max_pages=args.max_pages,
+                max_depth=args.max_depth,
+                include_patterns=args.include,
+                exclude_patterns=args.exclude,
+                allow_subdomains=args.subdomains,
+                output_dir=args.output_dir,
+                render=args.render,
+            )
+        )
+    print(out)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://docs.example.com/docs/start</loc><lastmod>2026-06-01</lastmod></url>
+  <url><loc>https://docs.example.com/docs/config</loc></url>
+  <url><loc>https://docs.example.com/docs/auth/login</loc></url>
+  <url><loc>https://docs.example.com/docs/auth/tokens</loc></url>
+  <url><loc>https://docs.example.com/blog/launch</loc></url>
+  <url><loc>https://blog.example.com/external-subdomain-post</loc></url>
+</urlset>

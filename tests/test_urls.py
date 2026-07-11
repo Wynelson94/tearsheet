@@ -1,4 +1,30 @@
-from tearsheet.urls import normalize_url, url_hash
+from tearsheet.urls import is_crawlable_url, normalize_url, url_hash
+
+
+class TestIsCrawlableUrl:
+    def test_plain_page_is_crawlable(self) -> None:
+        assert is_crawlable_url("https://example.com/docs/getting-started") is True
+
+    def test_too_many_query_params_rejected(self) -> None:
+        assert is_crawlable_url("https://example.com/search?a=1&b=2&c=3&d=4") is False
+
+    def test_three_params_still_allowed(self) -> None:
+        assert is_crawlable_url("https://example.com/search?a=1&b=2&c=3") is True
+
+    def test_repeating_path_segments_rejected(self) -> None:
+        assert is_crawlable_url("https://example.com/a/b/a/b/a/b") is False
+
+    def test_non_content_extensions_rejected(self) -> None:
+        for ext in ("jpg", "png", "css", "js", "zip", "mp4", "woff2", "svg", "ico"):
+            assert is_crawlable_url(f"https://example.com/asset.{ext}") is False, ext
+
+    def test_html_and_extensionless_allowed(self) -> None:
+        assert is_crawlable_url("https://example.com/page.html") is True
+        assert is_crawlable_url("https://example.com/page") is True
+
+    def test_non_http_schemes_rejected(self) -> None:
+        assert is_crawlable_url("mailto:a@b.com") is False
+        assert is_crawlable_url("javascript:void(0)") is False
 
 
 class TestNormalizeUrl:

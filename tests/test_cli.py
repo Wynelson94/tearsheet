@@ -13,6 +13,31 @@ class TestParser:
         assert args.fresh is False
         assert args.render == "auto"
 
+    def test_map_defaults(self) -> None:
+        args = build_parser().parse_args(["map", "https://example.com"])
+        assert args.command == "map"
+        assert args.max_urls == 200
+        assert args.search is None
+
+    def test_crawl_flags(self) -> None:
+        args = build_parser().parse_args(
+            [
+                "crawl",
+                "https://example.com/docs",
+                "--max-pages", "10",
+                "--max-depth", "1",
+                "--include", "/docs/*",
+                "--exclude", "/docs/legacy/*",
+                "--output-dir", "/tmp/x",
+            ]
+        )
+        assert args.command == "crawl"
+        assert args.max_pages == 10
+        assert args.max_depth == 1
+        assert args.include == ["/docs/*"]
+        assert args.exclude == ["/docs/legacy/*"]
+        assert args.output_dir == "/tmp/x"
+
     def test_scrape_flags(self) -> None:
         args = build_parser().parse_args(
             ["scrape", "https://example.com/a", "--max-length", "0", "--links", "--fresh"]
