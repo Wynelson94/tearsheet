@@ -94,7 +94,7 @@ a research tool for reading the public web — not for evading paywalls or bot d
   paragraph and can drop characters around inline `<em>` (observed: "i.e." → "e.").
   Facts survive; verbatim quotes should be re-verified against the source before reuse.
   Pinned by `tests/test_content.py::TestKnownUpstreamManglingDocumented` (fails when
-  upstream fixes it). Reported to adbar/trafilatura.
+  upstream fixes it). Reported: [adbar/trafilatura#882](https://github.com/adbar/trafilatura/issues/882).
 - Bot-walled sites (eCFR, DoD, Cloudflare in strict mode) are reported as
   `blocked by bot protection …` — deliberately not evaded; use the site's official API.
 - Wikipedia extractions can include maintenance-hatnote table noise ("This article
