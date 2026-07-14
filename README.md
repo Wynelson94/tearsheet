@@ -89,6 +89,17 @@ a research tool for reading the public web — not for evading paywalls or bot d
 
 ## Limitations & known issues
 
+- **Commercial/tabular pages are the weak spot — use `--raw` there.** Pricing grids, JS-tabbed
+  plan matrices, and consent-gated pages defeat the extractor: it returns something that *looks*
+  clean while the figures never made it. Measured 2026-07-14 on real pages — `quo.com/pricing`
+  kept 4 of 24 prices and flattened a 3-column matrix into repeated rows (`Unlimited* /
+  Unlimited* / Unlimited*`), while `heyrosie.com/pricing` came through perfectly. So the failure
+  is site-shaped, not universal, and you cannot eyeball it from the output alone.
+  Since v0.1.2 the tool says so itself: a `warning:` line reports dropped prices and collapsed
+  columns, and a cookie banner is reported as a `consent/cookie wall` instead of being served as
+  the page. **Never quote figures from a warned extraction — re-run with `--raw` / `raw=true`.**
+  Note `--raw` deliberately uses the plain fetch, not the browser: a rendered DOM can be *worse*
+  (on smith.ai the consent overlay replaced the pricing table the raw fetch still carried).
 - **Emphasis mangling (upstream)**: trafilatura 2.1.0's markdown serializer displaces
   nested-emphasis words (`<strong><em>word</em></strong>` mid-sentence) onto the next
   paragraph and can drop characters around inline `<em>` (observed: "i.e." → "e.").

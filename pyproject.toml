@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tearsheet"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local web-to-markdown for LLM research: scrape, crawl, map, search, extract — token-efficient, MCP-first."
 readme = "README.md"
 requires-python = ">=3.12"

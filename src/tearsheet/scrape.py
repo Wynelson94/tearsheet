@@ -8,7 +8,12 @@ import httpx
 
 from tearsheet.cache import Cache, CachedPage
 from tearsheet.config import Settings, get_settings
-from tearsheet.content import ExtractedContent, extract_content
+from tearsheet.content import (
+    ExtractedContent,
+    assess_extraction,
+    extract_content,
+    html_to_text,
+)
 from tearsheet.fetch import FetchResult, fetch_url, looks_blocked, needs_render
 from tearsheet.output import estimate_tokens, truncate
 from tearsheet.render import RenderUnavailableError, render_page
@@ -26,6 +31,15 @@ def _is_challenge(body: bytes | None) -> bool:
     return any(marker in lowered for marker in _CHALLENGE_MARKERS)
 
 
+def _consent_message(final_url: str) -> str:
+    return (
+        f"consent/cookie wall (final url: {final_url}); the extractor saw only a cookie "
+        "banner, not the page. The content is likely behind that gate — try raw=true, or "
+        "fetch the page independently. Reporting this rather than passing the banner off "
+        "as the page."
+    )
+
+
 async def scrape(
     url: str,
     *,
@@ -33,6 +47,7 @@ async def scrape(
     render: str = "auto",
     include_links: bool = False,
     fresh: bool = False,
+    raw: bool = False,
     settings: Settings | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> str:
@@ -43,11 +58,23 @@ async def scrape(
             cached = cache.get_page(url, settings.page_ttl_seconds)
             if cached is not None:
                 day = datetime.fromtimestamp(cached.fetched_at).strftime("%Y-%m-%d")
+                if cached.html and raw:
+                    return _format(
+                        url=cached.final_url or url,
+                        title=cached.title,
+                        fetched_label=f"cache {day} | via: {cached.via} | raw",
+                        markdown=html_to_text(cached.html),
+                        max_length=max_length,
+                        settings=settings,
+                    )
                 if cached.html:
                     extracted = extract_content(
                         cached.html, url=cached.final_url, include_links=include_links
                     )
-                    if extracted is not None:
+                    quality = assess_extraction(cached.html, extracted)
+                    # a poisoned row (banner cached as content) must not be served: fall
+                    # through to a live fetch rather than replay the bad extraction.
+                    if extracted is not None and not quality.consent_wall:
                         return _format(
                             url=cached.final_url or url,
                             title=extracted.title or cached.title,
@@ -55,6 +82,7 @@ async def scrape(
                             markdown=extracted.markdown,
                             max_length=max_length,
                             settings=settings,
+                            warnings=quality.warnings,
                         )
                 elif cached.markdown:  # html-less entries (e.g. PDFs) keep only markdown
                     return _format(
@@ -74,11 +102,7 @@ async def scrape(
                 return f"rendering unavailable ({exc}); {_INSTALL_HINT}"
         else:
             result = await fetch_url(url, settings=settings, transport=transport)
-            if (
-                render == "auto"
-                and result.status in (403, 503)
-                and _is_challenge(result.body)
-            ):
+            if render == "auto" and result.status in (403, 503) and _is_challenge(result.body):
                 rendered = await _try_render(url, settings)
                 if isinstance(rendered, FetchResult) and not rendered.error:
                     result = rendered
@@ -137,6 +161,23 @@ async def scrape(
         if ct and not ct.startswith("text/") and ct != "application/xhtml+xml":
             return f"unsupported content type '{ct}' at {url}"
 
+        if raw:
+            # Deliberately NOT auto-rendered: on smith.ai the rendered DOM was strictly
+            # WORSE than the plain fetch (a consent overlay replaced the pricing table the
+            # httpx body still carried). raw is the curl-equivalent escape hatch; pass
+            # render="always" to force a browser. Never cached — raw text is not markdown.
+            text = html_to_text(body)
+            if not text:
+                return f"no text found at {result.final_url}"
+            return _format(
+                url=result.final_url,
+                title=None,
+                fetched_label=f"live | via: {result.via} | raw",
+                markdown=text,
+                max_length=max_length,
+                settings=settings,
+            )
+
         extracted = extract_content(body, url=result.final_url, include_links=include_links)
         # tiny extraction triggers a render attempt even without shell markers (custom
         # SPA mounts); keep-whichever-extracts-more decides. crawl stays marker-based.
@@ -160,6 +201,10 @@ async def scrape(
                 message += f"\nwarning: {warning}"
             return message
 
+        quality = assess_extraction(body, extracted)
+        if quality.consent_wall:
+            return _consent_message(result.final_url)  # never cached: it isn't the page
+
         cache.put_page(
             CachedPage(
                 url=url,
@@ -173,6 +218,9 @@ async def scrape(
                 title=extracted.title,
             )
         )
+        warnings = list(quality.warnings)
+        if warning:
+            warnings.append(warning)
         return _format(
             url=result.final_url,
             title=extracted.title,
@@ -180,6 +228,7 @@ async def scrape(
             markdown=extracted.markdown,
             max_length=max_length,
             settings=settings,
+            warnings=warnings,
         )
     finally:
         cache.close()
@@ -223,6 +272,7 @@ def _format(
     markdown: str,
     max_length: int,
     settings: Settings,
+    warnings: list[str] | None = None,
 ) -> str:
     settings.pages_dir.mkdir(parents=True, exist_ok=True)
     full_path = settings.pages_dir / f"{url_hash(url)[:12]}.md"
@@ -238,7 +288,9 @@ def _format(
     lines = [f"url: {url}"]
     if title:
         lines.append(f"title: {title}")
-    lines.extend([f"fetched: {fetched_label}", tokens_line, "---", shown])
+    lines.extend([f"fetched: {fetched_label}", tokens_line])
+    lines.extend(f"warning: {w}" for w in warnings or [])
+    lines.extend(["---", shown])
     return "\n".join(lines)
 
 

@@ -20,6 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_scrape.add_argument("--links", action="store_true", help="keep hyperlinks in markdown")
     p_scrape.add_argument("--fresh", action="store_true", help="bypass cache")
     p_scrape.add_argument("--render", choices=["auto", "never", "always"], default="auto")
+    p_scrape.add_argument(
+        "--raw",
+        action="store_true",
+        help="skip the extractor; print the page's visible text (recovers tables/prices)",
+    )
 
     p_map = sub.add_parser("map", help="List a site's URLs without scraping them")
     p_map.add_argument("url")
@@ -76,6 +81,7 @@ def main(argv: list[str] | None = None) -> None:
                 include_links=args.links,
                 fresh=args.fresh,
                 render=args.render,
+                raw=args.raw,
             )
         )
     elif args.command == "map":

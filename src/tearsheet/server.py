@@ -40,6 +40,7 @@ async def scrape(
     render: str = "auto",
     include_links: bool = False,
     fresh: bool = False,
+    raw: bool = False,
 ) -> str:
     """Fetch one URL and return clean main-content markdown (boilerplate stripped).
 
@@ -49,6 +50,15 @@ async def scrape(
     (pass fresh=true to force a refetch). For whole sites, prefer map -> pick URLs -> scrape,
     or crawl, which writes files to disk and returns only an index.
 
+    HEED THE HEADER. Any `warning:` line means the extraction is known-unreliable — most
+    often that prices or table columns did not survive. Do not quote figures from a warned
+    extraction; re-run with raw=true and read the numbers yourself. A "consent/cookie wall"
+    reply means the extractor saw only a cookie banner, and is telling you so instead of
+    passing the banner off as the page.
+
+    Extraction is weakest on commercial/tabular pages (pricing grids, JS-tabbed plans).
+    On those, reach for raw=true early rather than trusting a clean-looking result.
+
     Args:
         url: Absolute http(s) URL to fetch.
         max_length: Max characters of markdown returned in-context; 0 = unlimited.
@@ -56,9 +66,17 @@ async def scrape(
             "never", or "always".
         include_links: Keep hyperlinks in the markdown (token-heavy; off by default).
         fresh: Bypass the cache and refetch.
+        raw: Skip the extractor and return the page's visible text (scripts/tags stripped).
+            The escape hatch for pricing tables and grids the extractor mangles. Uses the
+            plain fetch, NOT the browser — a rendered DOM can be worse (consent overlays).
     """
     return await scrape_page(
-        url, max_length=max_length, render=render, include_links=include_links, fresh=fresh
+        url,
+        max_length=max_length,
+        render=render,
+        include_links=include_links,
+        fresh=fresh,
+        raw=raw,
     )
 
 

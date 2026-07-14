@@ -76,6 +76,106 @@ class TestScrapeTruncation:
         assert "old, boring, and almost always correct" in out
 
 
+CONSENT_BANNER = (
+    "Opt-out Preferences We use cookies to analyze site traffic and measure our marketing "
+    "efforts. This helps us improve our website and services. However, you can opt out of "
+    'these cookies by checking "Do Not Sell or Share My Personal Information" and clicking '
+    'the "Save My Preferences" button. Once you opt out, you can opt in again at any time.'
+)
+# Reproduces smith.ai/pricing/receptionists (2026-07-14): huge markup, the only real text
+# is a cookie banner, and the pricing table never renders. trafilatura happily returns the
+# banner, which was then served as page content.
+CONSENT_PAGE = (
+    "<html><head><title>Plans &amp; Pricing</title></head><body>"
+    f"<div id='consent'><p>{CONSENT_BANNER}</p></div>"
+    f"{'<div class=grid data-x=1></div>' * 2000}</body></html>"
+).encode()
+
+# Prices live in chrome that trafilatura strips as boilerplate; the article keeps none of
+# them. This is the quo.com/pricing shape: figures on the page, absent from the extraction.
+PRICED_PAGE = (
+    "<html><body><nav>Starter $15 Business $23 Scale $47 Enterprise $99 Setup $19.50</nav>"
+    "<article><h1>Why we changed our plans</h1><p>"
+    + ("A long essay about packaging philosophy and nothing else. " * 40)
+    + "</p></article></body></html>"
+).encode()
+
+
+def _serving(content: bytes) -> httpx.MockTransport:
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(200, content=content, headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+    transport.calls = calls  # type: ignore[attr-defined]
+    return transport
+
+
+class TestConsentWall:
+    async def test_banner_is_reported_not_served_as_content(self) -> None:
+        out = await scrape(
+            "https://example.com/pricing", render="never", transport=_serving(CONSENT_PAGE)
+        )
+        assert "consent/cookie wall" in out
+        assert "We use cookies" not in out  # the banner must never be passed off as the page
+
+    async def test_consent_wall_is_not_cached(self) -> None:
+        transport = _serving(CONSENT_PAGE)
+        await scrape("https://example.com/pricing", render="never", transport=transport)
+        await scrape("https://example.com/pricing", render="never", transport=transport)
+        # a poisoned row would let the second call "succeed" from cache
+        assert transport.calls["count"] == 2  # type: ignore[attr-defined]
+
+
+class TestDroppedPriceWarning:
+    async def test_warns_when_prices_do_not_survive(self) -> None:
+        out = await scrape(
+            "https://example.com/plans", render="never", transport=_serving(PRICED_PAGE)
+        )
+        warning = next((ln for ln in out.splitlines() if ln.startswith("warning:")), None)
+        assert warning is not None
+        assert "prices" in warning
+        assert "raw=true" in warning
+        assert "packaging philosophy" in out  # content still returned, just flagged
+
+    async def test_warning_survives_a_cache_hit(self) -> None:
+        transport = _serving(PRICED_PAGE)
+        await scrape("https://example.com/plans", render="never", transport=transport)
+        out = await scrape("https://example.com/plans", render="never", transport=transport)
+        assert "cache" in out
+        assert any(ln.startswith("warning:") for ln in out.splitlines())
+
+
+class TestRawEscapeHatch:
+    async def test_raw_recovers_text_the_extractor_drops(self) -> None:
+        out = await scrape(
+            "https://example.com/plans", render="never", raw=True, transport=_serving(PRICED_PAGE)
+        )
+        assert "| raw" in out
+        for price in ("$15", "$23", "$47", "$99"):
+            assert price in out
+
+    async def test_normal_scrape_drops_those_same_prices(self) -> None:
+        """Guards the premise: raw is only worth having because extraction loses these."""
+        out = await scrape(
+            "https://example.com/plans", render="never", transport=_serving(PRICED_PAGE)
+        )
+        body = out.split("\n---\n", 1)[1]
+        assert "$47" not in body
+
+    async def test_raw_reads_from_cache_without_refetching(self) -> None:
+        transport = _serving(PRICED_PAGE)
+        await scrape("https://example.com/plans", render="never", transport=transport)
+        out = await scrape(
+            "https://example.com/plans", render="never", raw=True, transport=transport
+        )
+        assert transport.calls["count"] == 1  # type: ignore[attr-defined]
+        assert "| raw" in out
+        assert "$47" in out
+
+
 class TestScrapeErrors:
     async def test_http_error_status_reported(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
