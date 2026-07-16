@@ -28,9 +28,14 @@ _GATED_MIN_HTML = 50_000
 _GATED_MAX_TEXT = 2_000
 
 # Dropped-price guard. Calibrated on real pages: quo kept 17% of 24 prices (bad),
-# heyrosie kept 100% of 5 (good). Require enough prices that a stray footer figure
-# on a blog can't trip it.
-_MONEY_MIN_ON_PAGE = 4
+# heyrosie kept 100% of 5 (good). Arming requires a price CLUSTER, not a page-wide
+# count: pricing pages carry figures in a grid (quo max 17 distinct in one 1,500-char
+# window, smith.ai 7, heyrosie 5), while articles scatter real-but-peripheral dollar
+# amounts through prose and related-content cards (the 2026-07-14 LinkedIn false
+# positive: 4 figures page-wide, never more than 3 near each other). Page-wide counts
+# cannot tell those apart; clusters separate the calibration set with margin (3 vs 5).
+_MONEY_MIN_CLUSTERED = 4
+_MONEY_CLUSTER_WINDOW = 1_500
 _MONEY_MIN_RETAINED = 0.5
 
 # A collapsed table column reads as a run of identical consecutive rows
@@ -66,6 +71,26 @@ def html_to_text(html: bytes) -> str:
     text = _SCRIPT_STYLE.sub(" ", html.decode("utf-8", errors="replace"))
     text = html_module.unescape(_TAG.sub(" ", text))
     return _WHITESPACE.sub(" ", text).strip()
+
+
+def _has_price_cluster(page_text: str) -> bool:
+    """True when some 1,500-char window of visible text holds >= 4 distinct figures."""
+    hits = [(m.start(), m.group()) for m in _MONEY.finditer(page_text)]
+    if len(hits) < _MONEY_MIN_CLUSTERED:
+        return False
+    left = 0
+    window: dict[str, int] = {}
+    for pos, figure in hits:
+        window[figure] = window.get(figure, 0) + 1
+        while pos - hits[left][0] > _MONEY_CLUSTER_WINDOW:
+            gone = hits[left][1]
+            window[gone] -= 1
+            if not window[gone]:
+                del window[gone]
+            left += 1
+        if len(window) >= _MONEY_MIN_CLUSTERED:
+            return True
+    return False
 
 
 def _has_collapsed_columns(markdown: str) -> bool:
@@ -105,7 +130,7 @@ def assess_extraction(html: bytes, extracted: ExtractedContent | None) -> Extrac
         )
 
     on_page = set(_MONEY.findall(page_text))
-    if len(on_page) >= _MONEY_MIN_ON_PAGE:
+    if _has_price_cluster(page_text):
         kept = on_page & set(_MONEY.findall(markdown))
         if len(kept) / len(on_page) < _MONEY_MIN_RETAINED:
             quality.warnings.append(

@@ -1,14 +1,24 @@
 """Extraction-quality guards.
 
-Thresholds here are calibrated against three REAL pages captured 2026-07-14
+Thresholds here are calibrated against REAL pages captured 2026-07-14
 (cached HTML measured directly, see memory/project_tearsheet.md audit log):
 
-    page                            page_$  retained  consent  collapsed_runs  md_chars
-    quo.com/pricing        (BAD)        24       17%       no               7      3716
-    smith.ai/../receptionists (BAD)      0       n/a      YES               0       428
-    heyrosie.com/pricing   (GOOD)        5      100%       no               1     12128
+    page                            page_$  cluster  retained  consent  collapsed_runs  md_chars
+    quo.com/pricing        (BAD)        24       17       17%       no               7      3716
+    smith.ai/../receptionists (BAD)     17        7       18%       no               0      1452
+    heyrosie.com/pricing   (GOOD)        5        5      100%       no               1     12128
+    linkedin.com post      (GOOD)        4        3        0%       no               0     ~3500
 
-The guards must fire on the two bad pages and stay SILENT on the good one.
+The guards must fire on the bad pages and stay SILENT on the good ones.
+
+`cluster` = max distinct price figures within any 1,500-char window of visible
+text. It is the arming condition for the dropped-price guard: pricing pages
+carry their figures in a grid/table (quo 17, smith 7 clustered), while article
+pages scatter real-but-peripheral dollar amounts through prose and related-post
+cards (the LinkedIn false positive of 2026-07-14: 4 figures page-wide, never
+more than 3 near each other). A page-wide count cannot tell those apart; a
+cluster can, with margin on both sides (3 vs 5).
+
 An earlier design used a markdown/visible-text yield ratio; it is kept out on
 purpose because it provably fires on neither bad page (smith.ai yields 34%,
 quo 21%) while risking false positives on legitimately terse pages.
@@ -94,6 +104,37 @@ class TestMoneyRetention:
         body = "An essay about pricing psychology. Plans from $29/mo in the footer."
         quality = assess_extraction(page(body), extracted("An essay about pricing psychology."))
         assert not any("price" in w for w in quality.warnings)
+
+    def test_scattered_peripheral_prices_do_not_warn(self) -> None:
+        """The LinkedIn false positive (2026-07-14): four REAL dollar figures spread
+        across related-post cards on an article page. The extraction correctly kept
+        only the main post (which has no prices) — the guard must not punish it.
+        Page-wide there are >= 4 distinct figures, but never enough near each other
+        to look like a pricing region."""
+        spacer = "More thoughtful commentary about the industry and its people. " * 30
+        body = (
+            "The main post announces a merger and contains no dollar figures at all. "
+            + "It is a substantial piece of writing. " * 40
+            + f"Related: community groups halted $130 billion of projects. {spacer}"
+            + f"Related: intelligence crashed from $17 to $2 per million tokens. {spacer}"
+            + f"Related: Big Tech's $8 trillion AI bet is reshaping costs. {spacer}"
+        )
+        main_post = (
+            "The main post announces a merger and contains no dollar figures at all. "
+            + "It is a substantial piece of writing. " * 40
+        )
+        quality = assess_extraction(page(body), extracted(main_post))
+        assert not any("price" in w for w in quality.warnings)
+
+    def test_clustered_prices_still_arm_the_guard(self) -> None:
+        """Do-not-loosen regression: a genuine pricing grid whose figures all sit
+        together must still warn when the extraction drops them, even when the
+        page-wide total is small (the arming moved to clusters, not away from them)."""
+        body = "Plans: Starter $19/mo, Business $33/mo, Scale $47/mo, annual $15/mo. " + (
+            "Long marketing prose follows the grid. " * 80
+        )
+        quality = assess_extraction(page(body), extracted("Long marketing prose follows the grid."))
+        assert any("price" in w for w in quality.warnings)
 
 
 class TestCollapsedColumns:

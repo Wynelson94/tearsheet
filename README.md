@@ -98,6 +98,10 @@ a research tool for reading the public web — not for evading paywalls or bot d
   Since v0.1.2 the tool says so itself: a `warning:` line reports dropped prices and collapsed
   columns, and a cookie banner is reported as a `consent/cookie wall` instead of being served as
   the page. **Never quote figures from a warned extraction — re-run with `--raw` / `raw=true`.**
+  Since v0.1.3 the dropped-price guard arms only when the page carries a price *cluster*
+  (>= 4 distinct figures within 1,500 chars of visible text) — a pricing-grid signature — so
+  article pages with real-but-peripheral dollar amounts scattered through related-content
+  cards no longer trigger a false warning (observed 2026-07-14 on a LinkedIn post page).
   Note `--raw` deliberately uses the plain fetch, not the browser: a rendered DOM can be *worse*
   (on smith.ai the consent overlay replaced the pricing table the raw fetch still carried).
 - **Emphasis mangling (upstream)**: trafilatura 2.1.0's markdown serializer displaces
