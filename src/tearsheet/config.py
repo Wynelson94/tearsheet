@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_UA = "tearsheet/0.1 (+https://github.com/natenelson/tearsheet; research tool)"
+DEFAULT_UA = "tearsheet/0.1 (+https://github.com/Wynelson94/tearsheet; research tool)"
 
 
 @dataclass(frozen=True)

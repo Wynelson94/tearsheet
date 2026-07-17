@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Nate Nelson" }]
+
 dependencies = [
     "fastmcp>=3,<4",
     "httpx>=0.28",
@@ -21,6 +22,11 @@ dependencies = [
     "protego>=0.6",
     "pypdf>=6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Wynelson94/tearsheet"
+Repository = "https://github.com/Wynelson94/tearsheet"
+Issues = "https://github.com/Wynelson94/tearsheet/issues"
 
 [project.optional-dependencies]
 dev = [

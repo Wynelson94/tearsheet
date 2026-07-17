@@ -22,11 +22,13 @@ of content** for site crawls. The consuming model decides what to read next.
 ## Install
 
 ```bash
-git clone <this-repo> ~/Projects/tearsheet
-cd ~/Projects/tearsheet
+git clone https://github.com/Wynelson94/tearsheet.git
+cd tearsheet
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
+
+Not on PyPI (yet) — install from source. Requires Python >= 3.12.
 
 JS rendering (optional, for SPA fallback): `playwright install chromium`.
 Without it, tearsheet degrades gracefully and tells you when a page needed rendering.
@@ -176,3 +178,15 @@ TDD throughout; the default suite (243 tests) runs entirely offline — `httpx.M
 fixture HTML, and a conftest socket guard that fails any test reaching for a non-loopback
 address. Extras: `pytest -m playwright` (real chromium, local server), `pytest -m live`
 (real network). The live trust evaluation lives in `evals/` (see [Trust](#trust)).
+
+A note on `tests/fixtures/probation/`: four fixtures are real captured commercial pages
+(the tool's original documented failures, pinned forever); the article-peripheral fixture
+is synthetic, structurally calibrated to the real page it replaced — a named individual's
+public post isn't republished here.
+
+## Status & license
+
+Personal research tooling, shared as-is — it scratches a real itch and is tested like it
+matters, but there's no roadmap and no support promise. Issues and PRs welcome.
+
+MIT — see [LICENSE](LICENSE).

@@ -12,5 +12,7 @@ build/
 .env.local
 *.key
 credentials.json
-evals/reports/*/evidence/
-evals/reports/*/home/
+
+# eval runs: reports are public artifacts, raw evidence/caches stay local
+evals/reports/*/*
+!evals/reports/*/report.md

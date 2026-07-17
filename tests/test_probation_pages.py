@@ -6,11 +6,19 @@ Every guard change must keep passing against the actual failures, not synthetic
 approximations of them. This is the eval flywheel's first deposit: live failures
 get demoted into offline fixtures.
 
-    quo_pricing      — CSS-div grid; kept 4/24 figures, columns collapsed  (warn)
-    smithai_pricing  — consent banner served as the page                   (warn/wall)
-    dialpad_pricing  — JS-tabbed; figures live in RSC JSON, invisible      (documented)
-    heyrosie_pricing — the GOOD pricing page                               (silent)
-    linkedin_post    — real figures in peripheral cards; the v0.1.2 FP     (silent)
+    quo_pricing        — CSS-div grid; kept 4/24 figures, columns collapsed  (warn)
+    smithai_pricing    — consent banner served as the page                   (warn/wall)
+    dialpad_pricing    — JS-tabbed; figures live in RSC JSON, invisible      (documented)
+    heyrosie_pricing   — the GOOD pricing page                               (silent)
+    article_peripheral — real figures in peripheral cards; the v0.1.2 FP     (silent)
+
+article_peripheral is SYNTHETIC: the original capture was a real LinkedIn post
+(a named individual's page — not republished in a public repo). The synthetic
+reproduces the exact structural profile measured on the real page: 4 distinct
+figures in related-post cards, max 3 within any 1,500-char window, article title,
+substantial main body with no figures. Calibrated at creation: silent under the
+shipped guards, warns if the cluster floor drops to 1 (so it genuinely exercises
+the arming logic). The live class stays covered by evals/corpus.json (linkedin_fp).
 """
 
 import gzip
@@ -75,21 +83,27 @@ class TestHeyrosiePricing:
         assert not wall
 
 
-class TestLinkedInPost:
+class TestArticlePeripheral:
     def test_the_false_positive_stays_dead(self) -> None:
-        price, column, wall = price_warned(load("linkedin_post"))
+        price, column, wall = price_warned(load("article_peripheral"))
         assert not price, "peripheral real figures must not trip the guard (v0.1.3 fix)"
         assert not wall
 
-    def test_the_post_body_still_extracts(self) -> None:
-        extracted = extract_content(load("linkedin_post"))
+    def test_the_article_body_still_extracts(self) -> None:
+        extracted = extract_content(load("article_peripheral"))
         assert extracted is not None
-        assert "Light Heart Labs" in extracted.markdown
+        assert "Join Forces" in extracted.markdown
 
 
 @pytest.mark.parametrize(
     "name",
-    ["quo_pricing", "smithai_pricing", "dialpad_pricing", "heyrosie_pricing", "linkedin_post"],
+    [
+        "quo_pricing",
+        "smithai_pricing",
+        "dialpad_pricing",
+        "heyrosie_pricing",
+        "article_peripheral",
+    ],
 )
 def test_no_fixture_extraction_crashes(name: str) -> None:
     extracted = extract_content(load(name))
