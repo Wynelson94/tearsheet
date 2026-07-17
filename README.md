@@ -7,6 +7,11 @@ no telemetry.
 
 > *tearsheet (n.): a page torn from a publication and filed as proof it ran.*
 
+**Trust status:** qualified for heavy usage 2026-07-16 — 249 tests, a falsifiable live
+eval harness (verdict GREEN), and zero fabrications across the tool's entire recorded
+history. Its documented failure mode is *omission*, and the guards exist to make every
+omission loud. See [Trust](#trust).
+
 ## Why
 
 A language model pays for every token of nav, ads, and footer it reads. tearsheet extracts
@@ -102,8 +107,19 @@ a research tool for reading the public web — not for evading paywalls or bot d
   (>= 4 distinct figures within 1,500 chars of visible text) — a pricing-grid signature — so
   article pages with real-but-peripheral dollar amounts scattered through related-content
   cards no longer trigger a false warning (observed 2026-07-14 on a LinkedIn post page).
+  Since v0.1.4 the guard also matches **€/£**, arms at a lower floor (>= 3 distinct figures
+  page-wide) when the page *title* declares it a pricing page (the notion-class gap: plan
+  cards diluted by prose so figures never share a window), and a post-extraction **bot-wall
+  backstop** catches challenge pages too large for the raw-body heuristic — they are
+  reported and never cached, and previously poisoned cache rows are evicted, not replayed.
   Note `--raw` deliberately uses the plain fetch, not the browser: a rendered DOM can be *worse*
   (on smith.ai the consent overlay replaced the pricing table the raw fetch still carried).
+- **Figures no guard can see**: prices rendered by JS into tabs/RSC payloads (dialpad),
+  served as literal `"null"` placeholders (aircall), or drawn in images — invisible to any
+  non-interactive fetch, tearsheet included. And a page carrying a **single** figure sits
+  below every guard's floor by design (a one-figure floor would warn on every blog footer).
+  The rule is procedural: any figure you are going to quote gets `--raw` or independent
+  verification.
 - **Emphasis mangling (upstream)**: trafilatura 2.1.0's markdown serializer displaces
   nested-emphasis words (`<strong><em>word</em></strong>` mid-sentence) onto the next
   paragraph and can drop characters around inline `<em>` (observed: "i.e." → "e.").
@@ -118,12 +134,45 @@ a research tool for reading the public web — not for evading paywalls or bot d
 - `search` depends on ddgs backends, which occasionally break upstream; `backend="auto"`
   rotates around failures.
 
+## Trust
+
+"Can it be trusted for heavy usage?" is a measurement here, not a feeling.
+
+- **Offline suite (243 tests, runs in the gate)**: guard boundary pins, cache-poisoning
+  regressions, truncation honesty, charset torture, structure torture, adversarial
+  robustness — enforced fully offline by a loopback-only socket guard. The five REAL
+  pages that defined the tool's probation (quo, smith.ai, dialpad, heyrosie, a LinkedIn
+  false-positive page) are archived as permanent fixtures in `tests/fixtures/probation/`:
+  every guard change answers to the original failures forever.
+- **Real-browser suite (6 tests, `pytest -m playwright`)**: actual chromium against a
+  local delayed-JS server — networkidle degradation, browser relaunch, and a 30-render
+  soak asserting zero context leaks.
+- **Live eval harness (`evals/`)**: ~40-target corpus reweighted toward commercial/tabular
+  pages, scored by invariant against an independent oracle — *no figure the producing body
+  carries may go missing silently*. Isolated cache per run, per-item evidence archived for
+  human re-adjudication, count-based gates, and a verdict that refuses to exist when the
+  corpus isn't reachable. **Falsifiability is proven both directions**: neutering the
+  guards turns the verdict RED; restoring them turns it GREEN.
+- **Findings flywheel**: every live-eval failure gets demoted into a permanent offline
+  fixture from its archived bytes. Run 1 (2026-07-16) found one real guard gap and went
+  YELLOW; the fix shipped as v0.1.4 and run 2 went GREEN.
+
+Re-run the qualification any time (~15 min):
+
+```bash
+.venv/bin/python evals/run_eval.py
+```
+
+The standing usage contract, independent of any verdict: heed `warning:` lines, `--raw`
+for figures you'll quote, treat a suspiciously small extraction of a rich page as partial.
+
 ## Development
 
 ```bash
 .venv/bin/ruff check src tests && .venv/bin/mypy && .venv/bin/python -m pytest
 ```
 
-TDD throughout; the suite (150+ tests) runs entirely offline — `httpx.MockTransport`
-and fixture HTML, no network. Playwright-dependent tests are marked and skip when no
-chromium binary is present.
+TDD throughout; the default suite (243 tests) runs entirely offline — `httpx.MockTransport`,
+fixture HTML, and a conftest socket guard that fails any test reaching for a non-loopback
+address. Extras: `pytest -m playwright` (real chromium, local server), `pytest -m live`
+(real network). The live trust evaluation lives in `evals/` (see [Trust](#trust)).
