@@ -1,51 +1,277 @@
 {
-  "version": "2026-07-16",
+  "version": "2026-07-16.2",
   "notes": "Trust-qualification corpus. check drives scoring: content (fabrication+omission invariants), wall (honest refusal required), consent_or_content (clean content OR honest wall, never banner-as-content), shell (honest JS-shell hint or rendered content), map/crawl/search/json/pdf (verb-specific). Volatile pages get invariants, not pinned values; baselines/ pins exact figure sets for immutable pages on first run.",
   "burst": {
-    "domains": ["https://docs.python.org/3/", "https://fastapi.tiangolo.com/", "https://docs.astral.sh/uv/"],
-    "paths": ["", "tutorial/", "reference/"],
+    "domains": [
+      "https://docs.python.org/3/",
+      "https://fastapi.tiangolo.com/",
+      "https://docs.astral.sh/uv/"
+    ],
+    "paths": [
+      "",
+      "tutorial/",
+      "reference/"
+    ],
     "count": 45
   },
   "items": [
-    {"id": "quo", "check": "content", "url": "https://quo.com/pricing", "category": "pricing_grid", "expect_warning": true, "notes": "known-bad calibration page; both guards must fire or figures must be present"},
-    {"id": "slack", "check": "content", "url": "https://slack.com/pricing", "category": "pricing_grid"},
-    {"id": "notion", "check": "content", "url": "https://www.notion.com/pricing", "category": "pricing_grid"},
-    {"id": "zapier", "check": "content", "url": "https://zapier.com/pricing", "category": "pricing_grid"},
-    {"id": "tailscale", "check": "content", "url": "https://tailscale.com/pricing", "category": "pricing_grid"},
-    {"id": "zoom", "check": "content", "url": "https://www.zoom.com/en/pricing/", "category": "pricing_tabbed"},
-    {"id": "ringcentral", "check": "content", "url": "https://www.ringcentral.com/office/plansandpricing.html", "category": "pricing_tabbed"},
-    {"id": "heyrosie", "check": "content", "url": "https://heyrosie.com/pricing", "category": "plan_cards", "expect_no_price_warning": true, "notes": "known-good calibration page"},
-    {"id": "calendly", "check": "content", "url": "https://calendly.com/pricing", "category": "plan_cards"},
-    {"id": "basecamp", "check": "content", "url": "https://basecamp.com/pricing", "category": "plan_cards"},
-    {"id": "hetzner", "check": "content", "url": "https://www.hetzner.com/cloud/", "category": "pricing_non_usd"},
-    {"id": "scaleway", "check": "content", "url": "https://www.scaleway.com/en/pricing/", "category": "pricing_non_usd"},
-    {"id": "giffgaff", "check": "content", "url": "https://www.giffgaff.com/sim-only-plans", "category": "pricing_non_usd"},
-    {"id": "linkedin_fp", "check": "content", "url": "https://www.linkedin.com/posts/michael-bradley-07bab74a_wonderful-and-exciting-update-for-all-of-activity-7477891390971092993-gRMP", "category": "article_peripheral", "expect_no_price_warning": true, "notes": "the v0.1.2 false-positive page; must stay silent"},
-    {"id": "rfc9110", "check": "content", "url": "https://www.rfc-editor.org/rfc/rfc9110.html", "category": "pinned_immutable", "baseline": true},
-    {"id": "rfc2616_txt", "check": "content", "url": "https://www.rfc-editor.org/rfc/rfc2616.txt", "category": "pinned_immutable", "baseline": true},
-    {"id": "gutenberg_alice", "check": "content", "url": "https://www.gutenberg.org/files/11/11-h/11-h.htm", "category": "pinned_immutable", "baseline": true},
-    {"id": "w3c_css2", "check": "content", "url": "https://www.w3.org/TR/2011/REC-CSS2-20110607/", "category": "pinned_immutable", "baseline": true},
-    {"id": "gh_raw_pep8", "check": "content", "url": "https://raw.githubusercontent.com/python/peps/4c7dfb59e6a89e6f21a5f184f26722a11eae8f1a/peps/pep-0008.rst", "category": "pinned_immutable", "baseline": true, "notes": "raw at commit SHA — immutable"},
-    {"id": "wiki_idaho", "check": "content", "url": "https://en.wikipedia.org/wiki/Idaho", "category": "reference_table"},
-    {"id": "fed_h15", "check": "content", "url": "https://www.federalreserve.gov/releases/h15/", "category": "data_table"},
-    {"id": "pg_essay", "check": "content", "url": "https://www.paulgraham.com/greatwork.html", "category": "control_prose"},
-    {"id": "py_docs", "check": "content", "url": "https://docs.python.org/3/tutorial/introduction.html", "category": "control_docs"},
-    {"id": "fastapi_docs", "check": "content", "url": "https://fastapi.tiangolo.com/tutorial/first-steps/", "category": "control_docs"},
-    {"id": "guardian", "check": "consent_or_content", "url": "https://www.theguardian.com/us", "category": "consent_heavy"},
-    {"id": "lemonde", "check": "consent_or_content", "url": "https://www.lemonde.fr/", "category": "consent_heavy"},
-    {"id": "zeit", "check": "consent_or_content", "url": "https://www.zeit.de/index", "category": "consent_heavy"},
-    {"id": "ecfr", "check": "wall", "url": "https://www.ecfr.gov/current/title-48/chapter-1", "category": "botwall", "notes": "known eCFR wall from audits"},
-    {"id": "dodcio", "check": "wall", "url": "https://dodcio.defense.gov/zero-trust/", "category": "botwall", "notes": "known Akamai 403"},
-    {"id": "crunchbase", "check": "wall", "url": "https://www.crunchbase.com/organization/openai", "category": "botwall"},
-    {"id": "todomvc", "check": "shell", "url": "https://todomvc.com/examples/react/dist/", "category": "spa_shell", "notes": "known custom-mount class from build day"},
-    {"id": "aozora", "check": "content", "url": "https://www.aozora.gr.jp/cards/000148/files/789_14547.html", "category": "charset_shift_jis"},
-    {"id": "wiki_ja", "check": "content", "url": "https://ja.wikipedia.org/wiki/%E6%9D%B1%E4%BA%AC%E9%83%BD", "category": "charset_utf8_ja"},
-    {"id": "gh_api", "check": "json", "url": "https://api.github.com/repos/python/cpython", "category": "json_endpoint"},
-    {"id": "berkshire_pdf", "check": "pdf", "url": "https://www.berkshirehathaway.com/letters/2023ltr.pdf", "category": "pdf_figures", "notes": "figure-dense immutable PDF"},
-    {"id": "irs_p15", "check": "pdf", "url": "https://www.irs.gov/pub/irs-pdf/p15.pdf", "category": "pdf_tables"},
-    {"id": "map_uv", "check": "map", "url": "https://docs.astral.sh/uv/", "category": "map"},
-    {"id": "map_fastapi", "check": "map", "url": "https://fastapi.tiangolo.com/", "category": "map"},
-    {"id": "crawl_ruff", "check": "crawl", "url": "https://docs.astral.sh/ruff/", "category": "crawl", "max_pages": 5},
-    {"id": "search_smoke", "check": "search", "url": "trafilatura markdown extraction", "category": "search"}
+    {
+      "id": "quo",
+      "check": "content",
+      "url": "https://quo.com/pricing",
+      "category": "pricing_grid",
+      "expect_warning": true,
+      "notes": "known-bad calibration page; both guards must fire or figures must be present"
+    },
+    {
+      "id": "slack",
+      "check": "content",
+      "url": "https://slack.com/pricing",
+      "category": "pricing_grid"
+    },
+    {
+      "id": "notion",
+      "check": "content",
+      "url": "https://www.notion.com/pricing",
+      "category": "pricing_grid"
+    },
+    {
+      "id": "zapier",
+      "check": "content",
+      "url": "https://zapier.com/pricing",
+      "category": "pricing_grid"
+    },
+    {
+      "id": "tailscale",
+      "check": "content",
+      "url": "https://tailscale.com/pricing",
+      "category": "pricing_grid"
+    },
+    {
+      "id": "zoom",
+      "check": "content",
+      "url": "https://zoom.us/pricing",
+      "category": "pricing_tabbed"
+    },
+    {
+      "id": "ringcentral",
+      "check": "content",
+      "url": "https://www.ringcentral.com/office/plansandpricing.html",
+      "category": "pricing_tabbed"
+    },
+    {
+      "id": "heyrosie",
+      "check": "content",
+      "url": "https://heyrosie.com/pricing",
+      "category": "plan_cards",
+      "expect_no_price_warning": true,
+      "notes": "known-good calibration page"
+    },
+    {
+      "id": "calendly",
+      "check": "content",
+      "url": "https://calendly.com/pricing",
+      "category": "plan_cards"
+    },
+    {
+      "id": "basecamp",
+      "check": "content",
+      "url": "https://basecamp.com/pricing",
+      "category": "plan_cards"
+    },
+    {
+      "id": "hetzner",
+      "check": "content",
+      "url": "https://www.hetzner.com/cloud/",
+      "category": "pricing_non_usd"
+    },
+    {
+      "id": "scaleway",
+      "check": "content",
+      "url": "https://www.scaleway.com/en/pricing/",
+      "category": "pricing_non_usd"
+    },
+    {
+      "id": "giffgaff",
+      "check": "content",
+      "url": "https://www.giffgaff.com/sim-only-plans",
+      "category": "pricing_non_usd"
+    },
+    {
+      "id": "linkedin_fp",
+      "check": "content",
+      "url": "https://www.linkedin.com/posts/michael-bradley-07bab74a_wonderful-and-exciting-update-for-all-of-activity-7477891390971092993-gRMP",
+      "category": "article_peripheral",
+      "expect_no_price_warning": true,
+      "notes": "the v0.1.2 false-positive page; must stay silent"
+    },
+    {
+      "id": "rfc9110",
+      "check": "content",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "category": "pinned_immutable",
+      "baseline": true
+    },
+    {
+      "id": "rfc2616_txt",
+      "check": "content",
+      "url": "https://www.rfc-editor.org/rfc/rfc2616.txt",
+      "category": "pinned_immutable",
+      "baseline": true
+    },
+    {
+      "id": "gutenberg_alice",
+      "check": "content",
+      "url": "https://www.gutenberg.org/files/11/11-h/11-h.htm",
+      "category": "pinned_immutable",
+      "baseline": true
+    },
+    {
+      "id": "w3c_css2",
+      "check": "content",
+      "url": "https://www.w3.org/TR/2011/REC-CSS2-20110607/",
+      "category": "pinned_immutable",
+      "baseline": true
+    },
+    {
+      "id": "gh_raw_readme",
+      "check": "content",
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.12.0/README.rst",
+      "category": "pinned_immutable",
+      "baseline": true,
+      "notes": "raw at release tag \u2014 immutable"
+    },
+    {
+      "id": "wiki_idaho",
+      "check": "content",
+      "url": "https://en.wikipedia.org/wiki/Idaho",
+      "category": "reference_table"
+    },
+    {
+      "id": "fed_h15",
+      "check": "content",
+      "url": "https://www.federalreserve.gov/releases/h15/",
+      "category": "data_table"
+    },
+    {
+      "id": "pg_essay",
+      "check": "content",
+      "url": "https://www.paulgraham.com/greatwork.html",
+      "category": "control_prose"
+    },
+    {
+      "id": "py_docs",
+      "check": "content",
+      "url": "https://docs.python.org/3/tutorial/introduction.html",
+      "category": "control_docs"
+    },
+    {
+      "id": "fastapi_docs",
+      "check": "content",
+      "url": "https://fastapi.tiangolo.com/tutorial/first-steps/",
+      "category": "control_docs"
+    },
+    {
+      "id": "guardian",
+      "check": "consent_or_content",
+      "url": "https://www.theguardian.com/us",
+      "category": "consent_heavy"
+    },
+    {
+      "id": "lemonde",
+      "check": "consent_or_content",
+      "url": "https://www.lemonde.fr/",
+      "category": "consent_heavy"
+    },
+    {
+      "id": "zeit",
+      "check": "consent_or_content",
+      "url": "https://www.zeit.de/index",
+      "category": "consent_heavy"
+    },
+    {
+      "id": "ecfr",
+      "check": "wall",
+      "url": "https://www.ecfr.gov/current/title-48/chapter-1",
+      "category": "botwall",
+      "notes": "known eCFR wall from audits"
+    },
+    {
+      "id": "dodcio",
+      "check": "wall",
+      "url": "https://dodcio.defense.gov/zero-trust/",
+      "category": "botwall",
+      "notes": "known Akamai 403"
+    },
+    {
+      "id": "crunchbase",
+      "check": "wall",
+      "url": "https://www.crunchbase.com/organization/openai",
+      "category": "botwall"
+    },
+    {
+      "id": "todomvc",
+      "check": "shell",
+      "url": "https://todomvc.com/examples/react/dist/",
+      "category": "spa_shell",
+      "notes": "known custom-mount class (README known-issues); confirms the documented limit",
+      "documented_limit": true
+    },
+    {
+      "id": "aozora",
+      "check": "content",
+      "url": "https://www.aozora.gr.jp/cards/000148/files/789_14547.html",
+      "category": "charset_shift_jis"
+    },
+    {
+      "id": "wiki_ja",
+      "check": "content",
+      "url": "https://ja.wikipedia.org/wiki/%E6%9D%B1%E4%BA%AC%E9%83%BD",
+      "category": "charset_utf8_ja"
+    },
+    {
+      "id": "gh_api",
+      "check": "json",
+      "url": "https://api.github.com/repos/python/cpython",
+      "category": "json_endpoint"
+    },
+    {
+      "id": "berkshire_pdf",
+      "check": "pdf",
+      "url": "https://www.berkshirehathaway.com/letters/2023ltr.pdf",
+      "category": "pdf_figures",
+      "notes": "figure-dense immutable PDF"
+    },
+    {
+      "id": "irs_p15",
+      "check": "pdf",
+      "url": "https://www.irs.gov/pub/irs-pdf/p15.pdf",
+      "category": "pdf_tables"
+    },
+    {
+      "id": "map_uv",
+      "check": "map",
+      "url": "https://docs.astral.sh/uv/",
+      "category": "map"
+    },
+    {
+      "id": "map_fastapi",
+      "check": "map",
+      "url": "https://fastapi.tiangolo.com/",
+      "category": "map"
+    },
+    {
+      "id": "crawl_ruff",
+      "check": "crawl",
+      "url": "https://docs.astral.sh/ruff/",
+      "category": "crawl",
+      "max_pages": 5
+    },
+    {
+      "id": "search_smoke",
+      "check": "search",
+      "url": "trafilatura markdown extraction",
+      "category": "search"
+    }
   ]
 }

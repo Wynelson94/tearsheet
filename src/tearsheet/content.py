@@ -60,6 +60,14 @@ _MONEY_MIN_CLUSTERED = 4
 _MONEY_CLUSTER_WINDOW = 1_500
 _MONEY_MIN_RETAINED = 0.5
 
+# Second arming path (the notion-class gap, live eval 2026-07-16): a page whose TITLE
+# declares it a pricing page gets a lower floor — >= 3 distinct figures page-wide, no
+# window — because plan cards diluted by marketing prose can spread real figures more
+# than 1,500 chars apart. Articles never get this path (the LinkedIn FP protection):
+# their titles don't say "pricing".
+_PRICING_TITLE = re.compile(r"pricing|plans? and pricing|tarif|preise", re.I)
+_MONEY_MIN_TITLED = 3
+
 # A collapsed table column reads as a run of identical consecutive rows
 # (quo: `Unlimited* / Unlimited* / Unlimited*`). One run happens naturally; two is a pattern.
 _COLLAPSE_RUN_LEN = 3
@@ -157,7 +165,12 @@ def assess_extraction(html: bytes, extracted: ExtractedContent | None) -> Extrac
         )
 
     on_page = set(_MONEY.findall(page_text))
-    if _has_price_cluster(page_text):
+    title_armed = (
+        extracted.title is not None
+        and _PRICING_TITLE.search(extracted.title) is not None
+        and len(on_page) >= _MONEY_MIN_TITLED
+    )
+    if title_armed or _has_price_cluster(page_text):
         kept = on_page & set(_MONEY.findall(markdown))
         if len(kept) / len(on_page) < _MONEY_MIN_RETAINED:
             quality.warnings.append(

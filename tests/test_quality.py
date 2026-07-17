@@ -185,6 +185,53 @@ class TestCurrencyCoverage:
         assert not any("price" in w for w in quality.warnings)
 
 
+class TestTitleArming:
+    """The notion-class gap (live eval, 2026-07-16): a REAL pricing page whose plan
+    cards are diluted by marketing prose, so its 4 distinct figures never share a
+    1,500-char window — the cluster guard can't arm, and 3 of 4 figures vanished
+    silently. When the page DECLARES itself a pricing page (title), the arming
+    floor drops: >= 3 distinct figures page-wide is enough."""
+
+    @staticmethod
+    def spread(figures: list[str]) -> str:
+        gap = "Marketing prose between the plan cards, quite long indeed. " * 30  # ~1.8k
+        return gap.join(f"Plan at {f} per member." for f in figures)
+
+    def test_pricing_titled_page_with_spread_figures_warns(self) -> None:
+        body = self.spread(["$0", "$10", "$20", "$8"])
+        quality = assess_extraction(
+            page(body),
+            ExtractedContent(markdown="Plan at $10 per member.", title="Pricing Plans — Notion", description=None),
+        )
+        assert any("price" in w for w in quality.warnings)
+
+    def test_pricing_titled_page_keeping_figures_stays_silent(self) -> None:
+        body = self.spread(["$0", "$10", "$20", "$8"])
+        quality = assess_extraction(
+            page(body),
+            ExtractedContent(markdown=body, title="Pricing · Tailscale", description=None),
+        )
+        assert not any("price" in w for w in quality.warnings)
+
+    def test_untitled_page_with_spread_figures_stays_silent(self) -> None:
+        """Without the title signal, spread figures are the article class — silent
+        (this is the LinkedIn FP protection; do not regress it)."""
+        body = self.spread(["$130", "$17", "$2", "$8"])
+        quality = assess_extraction(
+            page(body),
+            ExtractedContent(markdown="An article paragraph.", title="Big Tech news roundup", description=None),
+        )
+        assert not any("price" in w for w in quality.warnings)
+
+    def test_pricing_title_with_two_figures_stays_silent(self) -> None:
+        body = self.spread(["$10", "$20"])
+        quality = assess_extraction(
+            page(body),
+            ExtractedContent(markdown="prose only", title="Pricing — Tiny Co", description=None),
+        )
+        assert not any("price" in w for w in quality.warnings)
+
+
 class TestBlockWallBackstop:
     """Post-extraction bot-wall detection — the >30KB hole.
 
