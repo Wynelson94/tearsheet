@@ -42,6 +42,9 @@ include = ["tearsheet*"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# The default gate is fully offline and browser-free; run the extras explicitly with
+#   pytest -m playwright   (real chromium)   /   pytest -m live   (real network)
+addopts = "-m 'not playwright and not live'"
 filterwarnings = [
     # Third-party deprecation noise, triaged 2026-07-11: mf2py (extruct dep) still uses
     # codecs.open on py3.14. Not our code; re-check on extruct upgrades.
@@ -49,6 +52,7 @@ filterwarnings = [
 ]
 markers = [
     "playwright: requires an installed chromium binary (deselected by default in CI)",
+    "live: touches the real network; exempt from the offline socket guard (deselected by default)",
 ]
 
 [tool.ruff]

@@ -1,8 +1,51 @@
+import socket
 from pathlib import Path
 
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+_REAL_CONNECT = socket.socket.connect
+_REAL_GETADDRINFO = socket.getaddrinfo
+
+
+def _is_loopback(host: object) -> bool:
+    return isinstance(host, str) and (
+        host in ("localhost", "::1") or host.startswith("127.")
+    )
+
+
+@pytest.fixture(autouse=True)
+def _no_remote_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    """Offline determinism is a guarantee, not a convention: any test that reaches for
+    a non-loopback socket fails loudly. Loopback stays open (local test servers,
+    playwright's browser transport). Opt out with @pytest.mark.live."""
+    if request.node.get_closest_marker("live"):
+        yield
+        return
+
+    def guarded_connect(self: socket.socket, address: object) -> None:
+        if isinstance(address, (str, bytes)) or (
+            isinstance(address, tuple) and _is_loopback(address[0])
+        ):
+            _REAL_CONNECT(self, address)  # type: ignore[arg-type]
+            return
+        raise RuntimeError(
+            f"offline test attempted a network connection to {address!r} — "
+            "mark it @pytest.mark.live if that is intentional"
+        )
+
+    def guarded_getaddrinfo(host: object, *args: object, **kwargs: object) -> object:
+        if host is None or _is_loopback(host):
+            return _REAL_GETADDRINFO(host, *args, **kwargs)  # type: ignore[arg-type]
+        raise RuntimeError(
+            f"offline test attempted a DNS lookup for {host!r} — "
+            "mark it @pytest.mark.live if that is intentional"
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
+    yield
 
 
 @pytest.fixture
@@ -11,6 +54,14 @@ def fixture_bytes():  # type: ignore[no-untyped-def]
         return (FIXTURES / name).read_bytes()
 
     return load
+
+
+@pytest.fixture
+def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Shared TEARSHEET_HOME isolation for new test files (file-local copies shadow this)."""
+    home = tmp_path / "tearsheet-home"
+    monkeypatch.setenv("TEARSHEET_HOME", str(home))
+    return home
 
 
 def build_pdf(text: str) -> bytes:
