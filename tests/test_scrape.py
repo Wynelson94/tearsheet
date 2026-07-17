@@ -303,3 +303,138 @@ class TestScrapeErrors:
         out = await scrape("https://example.com/api", transport=httpx.MockTransport(handler))
         assert '"a"' in out
         assert "\n" in out.split("---", 1)[1]
+
+
+WALL_MAIN = (
+    b"<main><h1>Attention Required!</h1><p>Please verify you are a human to continue. "
+    b"Complete the CAPTCHA below to access this page.</p></main>"
+)
+
+
+def oversized_wall_html() -> bytes:
+    """A challenge page padded past fetch._BLOCK_MAX_BODY (30 KB): the raw-body
+    heuristic must skip it, so only a post-extraction backstop can catch it."""
+    pad = b"<div class='challenge-asset' data-x='y'></div>" * 800  # ~36 KB of inert markup
+    return b"<html><body>" + pad + WALL_MAIN + b"</body></html>"
+
+
+class TestOversizedBotwall:
+    """The >30KB block-cache hole (trust-suite review, 2026-07-16)."""
+
+    async def test_oversized_wall_reported_not_served(self) -> None:
+        html = oversized_wall_html()
+        assert len(html) > 30_000  # must actually clear the raw-body guard
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=html, headers={"content-type": "text/html"})
+
+        out = await scrape(
+            "https://walled.example/page", render="never", transport=httpx.MockTransport(handler)
+        )
+        assert "blocked by bot protection" in out
+        assert "Complete the CAPTCHA" not in out  # the wall text must not be served as content
+
+    async def test_oversized_wall_never_cached(self) -> None:
+        html = oversized_wall_html()
+        calls = {"count": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["count"] += 1
+            return httpx.Response(200, content=html, headers={"content-type": "text/html"})
+
+        transport = httpx.MockTransport(handler)
+        await scrape("https://walled.example/page", render="never", transport=transport)
+        await scrape("https://walled.example/page", render="never", transport=transport)
+        assert calls["count"] == 2  # a wall must never be served from cache
+
+    async def test_preseeded_wall_row_not_served_from_cache(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        """Rows poisoned by pre-fix versions must not be replayed on cache read."""
+        import time
+
+        from tearsheet.cache import Cache, CachedPage
+        from tearsheet.config import get_settings
+
+        settings = get_settings()
+        cache = Cache(settings.cache_db)
+        cache.put_page(
+            CachedPage(
+                url="https://walled.example/old",
+                final_url="https://walled.example/old",
+                fetched_at=int(time.time()),
+                status=200,
+                content_type="text/html",
+                via="httpx",
+                html=oversized_wall_html(),
+                markdown="Attention Required! Complete the CAPTCHA.",
+                title=None,
+            )
+        )
+        cache.close()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, content=fixture_bytes("article.html"), headers={"content-type": "text/html"}
+            )
+
+        out = await scrape(
+            "https://walled.example/old", render="never", transport=httpx.MockTransport(handler)
+        )
+        assert "linden trees bloom" in out  # fell through to the live fetch
+        assert "CAPTCHA" not in out
+
+
+class TestPoisonedRenderLockIn:
+    """put_page's playwright-beats-httpx rule must not lock in a poisoned render
+    (the smith.ai lesson inverted): after a poisoned cached row forces a live
+    re-fetch, the good replacement must actually be stored."""
+
+    CONSENT_HTML = (
+        b"<html><body><main><p>Opt-out Preferences We use cookies to analyze site "
+        b"traffic and measure our marketing efforts. However, you can opt out of these "
+        b'cookies by checking "Do Not Sell or Share My Personal Information" and '
+        b'clicking the "Save My Preferences" button.</p></main></body></html>'
+    )
+
+    async def test_good_httpx_content_replaces_poisoned_playwright_row(
+        self, fixture_bytes: Callable[[str], bytes]
+    ) -> None:
+        import time
+
+        from tearsheet.cache import Cache, CachedPage
+        from tearsheet.config import get_settings
+
+        settings = get_settings()
+        cache = Cache(settings.cache_db)
+        cache.put_page(
+            CachedPage(
+                url="https://locked.example/pricing",
+                final_url="https://locked.example/pricing",
+                fetched_at=int(time.time()),
+                status=200,
+                content_type="text/html",
+                via="playwright",
+                html=self.CONSENT_HTML,
+                markdown="We use cookies to analyze site traffic.",
+                title=None,
+            )
+        )
+        cache.close()
+        calls = {"count": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["count"] += 1
+            return httpx.Response(
+                200, content=fixture_bytes("article.html"), headers={"content-type": "text/html"}
+            )
+
+        transport = httpx.MockTransport(handler)
+        out = await scrape("https://locked.example/pricing", render="never", transport=transport)
+        assert "linden trees bloom" in out  # poison not served
+
+        # The replacement must have been STORED: a second scrape is a cache hit.
+        out2 = await scrape("https://locked.example/pricing", render="never", transport=transport)
+        assert calls["count"] == 1
+        assert "cache" in out2
+        assert "linden trees bloom" in out2

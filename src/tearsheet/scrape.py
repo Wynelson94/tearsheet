@@ -53,6 +53,7 @@ async def scrape(
 ) -> str:
     settings = settings or get_settings()
     cache = Cache(settings.cache_db)
+    replace_poisoned = False  # a cached wall row forced a live re-fetch: store the replacement
     try:
         if not fresh:
             cached = cache.get_page(url, settings.page_ttl_seconds)
@@ -72,9 +73,11 @@ async def scrape(
                         cached.html, url=cached.final_url, include_links=include_links
                     )
                     quality = assess_extraction(cached.html, extracted)
-                    # a poisoned row (banner cached as content) must not be served: fall
-                    # through to a live fetch rather than replay the bad extraction.
-                    if extracted is not None and not quality.consent_wall:
+                    # a poisoned row (banner or bot wall cached as content) must not be
+                    # served: fall through to a live fetch rather than replay it — and let
+                    # the replacement overwrite the row even across the via-preference.
+                    replace_poisoned = quality.consent_wall or quality.block_wall
+                    if extracted is not None and not replace_poisoned:
                         return _format(
                             url=cached.final_url or url,
                             title=extracted.title or cached.title,
@@ -204,6 +207,13 @@ async def scrape(
         quality = assess_extraction(body, extracted)
         if quality.consent_wall:
             return _consent_message(result.final_url)  # never cached: it isn't the page
+        if quality.block_wall:
+            # the raw-body heuristic missed it (e.g. a >30KB challenge page); the
+            # extraction IS the wall — report honestly, never cache.
+            return (
+                f"blocked by bot protection (final url: {result.final_url});"
+                " the site may offer an official API — try that or a manual fetch"
+            )
 
         cache.put_page(
             CachedPage(
@@ -216,7 +226,8 @@ async def scrape(
                 html=body,
                 markdown=extracted.markdown,
                 title=extracted.title,
-            )
+            ),
+            force=replace_poisoned,
         )
         warnings = list(quality.warnings)
         if warning:

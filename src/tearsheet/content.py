@@ -8,7 +8,7 @@ from itertools import groupby
 _SCRIPT_STYLE = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
 _TAG = re.compile(r"<[^>]+>")
 _WHITESPACE = re.compile(r"\s+")
-_MONEY = re.compile(r"\$[0-9][0-9,]*(?:\.[0-9]{2})?")
+_MONEY = re.compile(r"[$€£][0-9][0-9,]*(?:\.[0-9]{2})?")
 
 # Strong phrases + a size guard, mirroring fetch.looks_blocked: a page that merely
 # DISCUSSES cookie consent is long; a page that IS a consent wall is short.
@@ -21,6 +21,28 @@ _CONSENT_PHRASES = (
     "your privacy choices",
 )
 _CONSENT_MAX_CHARS = 2_000
+
+# Post-extraction bot-wall backstop. fetch.looks_blocked guards the RAW body and
+# deliberately bails above 30 KB (articles about captchas are long) — but real
+# challenge pages CAN exceed 30 KB once their JS is inlined, sail past that guard,
+# extract to a short wall message, and get cached as "content" for the whole TTL.
+# Same lesson as the consent wall: when the extraction IS the wall, catch it here,
+# regardless of body size. Keep phrases in sync with fetch._BLOCK_MARKERS.
+_BLOCK_PHRASES = (
+    "complete the captcha",
+    "solve the captcha",
+    "flagged as potentially automated",
+    "attention required",
+    "verify you are a human",
+    "are you a robot",
+    "enable javascript and cookies to continue",
+    "checking your browser",
+)
+# Tighter than the consent threshold on purpose: real challenge pages extract to a
+# few hundred chars (the whole page IS the message), while even a SHORT legitimate
+# article that quotes captcha phrasing runs well past this (article.html fixture with
+# an added captcha sentence extracts to ~1,576 chars). Calibrated between those.
+_BLOCK_MAX_CHARS = 600
 
 # A page whose markup is huge but whose visible text is a rounding error never
 # rendered its content (smith.ai: 96 KB of markup, 1,267 chars of text).
@@ -54,9 +76,10 @@ class ExtractedContent:
 
 @dataclass
 class ExtractionQuality:
-    """Post-extraction verdict. `consent_wall` is fatal; `warnings` ride along with content."""
+    """Post-extraction verdict. `consent_wall`/`block_wall` are fatal; `warnings` ride along."""
 
     consent_wall: bool = False
+    block_wall: bool = False
     warnings: list[str] = field(default_factory=list)
 
 
@@ -120,6 +143,10 @@ def assess_extraction(html: bytes, extracted: ExtractedContent | None) -> Extrac
 
     if len(markdown) < _CONSENT_MAX_CHARS and any(p in lowered for p in _CONSENT_PHRASES):
         quality.consent_wall = True
+        return quality
+
+    if len(markdown) < _BLOCK_MAX_CHARS and any(p in lowered for p in _BLOCK_PHRASES):
+        quality.block_wall = True
         return quality
 
     if len(html) > _GATED_MIN_HTML and len(page_text) < _GATED_MAX_TEXT:

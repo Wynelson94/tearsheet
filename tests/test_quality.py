@@ -137,6 +137,85 @@ class TestMoneyRetention:
         assert any("price" in w for w in quality.warnings)
 
 
+class TestPriceClusterBoundaries:
+    """Boundary semantics of the v0.1.3 cluster arming (>= 4 distinct in 1,500 chars)."""
+
+    def test_exactly_four_distinct_in_window_arms(self) -> None:
+        body = "Plans: $11, $22, $33, $44 side by side. " + "Filler prose here. " * 100
+        quality = assess_extraction(page(body), extracted("Filler prose here."))
+        assert any("price" in w for w in quality.warnings)
+
+    def test_three_distinct_in_window_stays_silent(self) -> None:
+        body = "Plans: $11, $22, $33 side by side. " + "Filler prose here. " * 100
+        quality = assess_extraction(page(body), extracted("Filler prose here."))
+        assert not any("price" in w for w in quality.warnings)
+
+    def test_four_figures_straddling_windows_stay_silent(self) -> None:
+        """Four distinct figures, each ~1,600 chars apart: no window holds four."""
+        gap = "Long editorial stretch between money mentions. " * 40  # ~1,880 chars
+        body = f"first at $11. {gap} then $22. {gap} then $33. {gap} finally $44."
+        quality = assess_extraction(page(body), extracted("Long editorial stretch"))
+        assert not any("price" in w for w in quality.warnings)
+
+    def test_duplicate_figures_do_not_inflate_the_cluster(self) -> None:
+        body = "It costs $9. Yes, $9. Only $9. Just $9 again. " + "Prose. " * 50
+        quality = assess_extraction(page(body), extracted("Prose."))
+        assert not any("price" in w for w in quality.warnings)
+
+
+class TestCurrencyCoverage:
+    """The dropped-price guard must protect non-USD pricing pages too.
+
+    Exposure test from the 2026-07-16 trust-suite review: `_MONEY` was `$`-only,
+    so a EUR/GBP pricing grid whose figures all vanished got ZERO protection."""
+
+    def test_euro_pricing_grid_dropped_is_caught(self) -> None:
+        body = "Starter €19/mo, Business €33/mo, Scale €47/mo, annual €15/mo. " + "Prose. " * 80
+        quality = assess_extraction(page(body), extracted("Prose."))
+        assert any("price" in w for w in quality.warnings)
+
+    def test_pound_pricing_grid_dropped_is_caught(self) -> None:
+        body = "Basic £12/mo, Team £24/mo, Firm £36/mo, setup £99. " + "Prose. " * 80
+        quality = assess_extraction(page(body), extracted("Prose."))
+        assert any("price" in w for w in quality.warnings)
+
+    def test_euro_page_that_keeps_figures_is_silent(self) -> None:
+        body = "Starter €19/mo, Business €33/mo, Scale €47/mo, annual €15/mo."
+        quality = assess_extraction(page(body), extracted(body))
+        assert not any("price" in w for w in quality.warnings)
+
+
+class TestBlockWallBackstop:
+    """Post-extraction bot-wall detection — the >30KB hole.
+
+    fetch.looks_blocked guards the RAW body and bails above 30KB (articles about
+    captchas are long). But real challenge pages CAN exceed 30KB (inlined JS), sail
+    past that guard, extract to a short wall message, get cached, and get served as
+    content for the whole TTL. Mirror of the consent-wall lesson: when the extraction
+    IS the wall, catch it post-extraction, regardless of body size."""
+
+    WALL_TEXT = (
+        "Attention Required! Please verify you are a human to continue. "
+        "Complete the CAPTCHA below to access this page."
+    )
+
+    def test_short_wall_extraction_is_flagged_fatal(self) -> None:
+        quality = assess_extraction(page(self.WALL_TEXT, pad=4000), extracted(self.WALL_TEXT))
+        assert quality.block_wall is True
+
+    def test_long_article_about_captchas_is_not_flagged(self) -> None:
+        article = (
+            "CAPTCHAs are everywhere. Sites ask you to verify you are a human, "
+            "or to complete the CAPTCHA before checkout. " + "The history is long. " * 150
+        )
+        quality = assess_extraction(page(article), extracted(article))
+        assert quality.block_wall is False
+
+    def test_ordinary_page_is_not_flagged(self) -> None:
+        quality = assess_extraction(page("A normal essay."), extracted("A normal essay."))
+        assert quality.block_wall is False
+
+
 class TestCollapsedColumns:
     def test_repeated_rows_warn(self) -> None:
         """quo: a 3-column matrix flattened to `Unlimited* / Unlimited* / Unlimited*`."""

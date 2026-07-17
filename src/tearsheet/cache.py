@@ -86,10 +86,13 @@ class Cache:
             last_modified=row[10],
         )
 
-    def put_page(self, page: CachedPage) -> None:
+    def put_page(self, page: CachedPage, *, force: bool = False) -> None:
+        """Store a page. `force=True` overrides the playwright-beats-httpx preference —
+        used when the existing row was judged poisoned (wall cached as content) and the
+        replacement, whatever its via, is strictly better than the poison."""
         h = url_hash(page.url)
         existing = self._conn.execute("SELECT via FROM pages WHERE url_hash = ?", (h,)).fetchone()
-        if existing and existing[0] == "playwright" and page.via != "playwright":
+        if not force and existing and existing[0] == "playwright" and page.via != "playwright":
             return
         self._conn.execute(
             "INSERT OR REPLACE INTO pages (url_hash, url, final_url, fetched_at, status,"

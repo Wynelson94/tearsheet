@@ -117,3 +117,50 @@ class TestRobots:
 
     def test_missing_host(self, cache: Cache) -> None:
         assert cache.get_robots("https://nope.com", ttl_seconds=3600) is None
+
+
+class TestForcedReplacement:
+    """force=True is the poison-eviction override for the via-preference rule."""
+
+    def test_default_preserves_playwright_over_httpx(self, cache: Cache) -> None:
+        cache.put_page(make_page(via="playwright", markdown="rendered"))
+        cache.put_page(make_page(via="httpx", markdown="static"))
+        got = cache.get_page("https://example.com/a", ttl_seconds=3600)
+        assert got is not None and got.markdown == "rendered"
+
+    def test_force_replaces_playwright_with_httpx(self, cache: Cache) -> None:
+        cache.put_page(make_page(via="playwright", markdown="poisoned render"))
+        cache.put_page(make_page(via="httpx", markdown="good static"), force=True)
+        got = cache.get_page("https://example.com/a", ttl_seconds=3600)
+        assert got is not None and got.markdown == "good static"
+        assert got.via == "httpx"
+
+
+class TestConcurrentConnections:
+    """Two Cache handles on the same file (≈ two processes for sqlite/WAL purposes)."""
+
+    def test_interleaved_writers_and_readers(self, tmp_path: Path) -> None:
+        db = tmp_path / "cache.db"
+        a, b = Cache(db), Cache(db)
+        try:
+            for i in range(10):
+                a.put_page(make_page(f"https://example.com/a{i}", markdown=f"a{i}"))
+                b.put_page(make_page(f"https://example.com/b{i}", markdown=f"b{i}"))
+                assert b.get_page(f"https://example.com/a{i}", ttl_seconds=3600) is not None
+                assert a.get_page(f"https://example.com/b{i}", ttl_seconds=3600) is not None
+            assert a.stats()["pages"] == 20
+        finally:
+            a.close()
+            b.close()
+
+
+class TestTtlBoundary:
+    def test_row_at_exact_ttl_age_is_expired(self, cache: Cache) -> None:
+        now = 1_800_000_000
+        cache.put_page(make_page(fetched_at=now - 3600))
+        assert cache.get_page("https://example.com/a", ttl_seconds=3600, now=now) is None
+
+    def test_row_one_second_inside_ttl_is_served(self, cache: Cache) -> None:
+        now = 1_800_000_000
+        cache.put_page(make_page(fetched_at=now - 3599))
+        assert cache.get_page("https://example.com/a", ttl_seconds=3600, now=now) is not None
