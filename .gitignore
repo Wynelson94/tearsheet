@@ -12,3 +12,5 @@ build/
 .env.local
 *.key
 credentials.json
+evals/reports/*/evidence/
+evals/reports/*/home/
