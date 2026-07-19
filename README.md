@@ -1,5 +1,9 @@
 # tearsheet
 
+[![CI](https://github.com/Wynelson94/tearsheet/actions/workflows/ci.yml/badge.svg)](https://github.com/Wynelson94/tearsheet/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 Local, self-hosted web-to-markdown for LLM research. A Firecrawl-style toolset — scrape,
 crawl, map, search, extract — that runs entirely on your machine, built to feed Claude Code
 (or any MCP client) **clean content with minimal context tokens**. No API keys, no SaaS,
@@ -11,6 +15,11 @@ no telemetry.
 eval harness (verdict GREEN), and zero fabrications across the tool's entire recorded
 history. Its documented failure mode is *omission*, and the guards exist to make every
 omission loud. See [Trust](#trust).
+
+📖 **Documentation:** full install, tool/CLI reference, architecture, the guard/`raw` contract,
+and troubleshooting live in the **[Wiki](https://github.com/Wynelson94/tearsheet/wiki)**.
+Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) · Security? [SECURITY.md](SECURITY.md) ·
+History? [CHANGELOG.md](CHANGELOG.md).
 
 ## Why
 
