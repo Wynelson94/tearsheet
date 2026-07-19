@@ -7,7 +7,7 @@ no telemetry.
 
 > *tearsheet (n.): a page torn from a publication and filed as proof it ran.*
 
-**Trust status:** qualified for heavy usage 2026-07-16 — 249 tests, a falsifiable live
+**Trust status:** qualified for heavy usage 2026-07-16 — 243 tests, a falsifiable live
 eval harness (verdict GREEN), and zero fabrications across the tool's entire recorded
 history. Its documented failure mode is *omission*, and the guards exist to make every
 omission loud. See [Trust](#trust).
